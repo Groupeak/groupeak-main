@@ -5,8 +5,8 @@
   <br></br>
 </div>
 
-![Stars](https://img.shields.io/github/stars/binarybenefactors?style=social)
-![GitHub followers](https://img.shields.io/github/followers/binarybenefactors?style=social)
+![Stars](https://img.shields.io/github/stars/Groupeak?style=social)
+![GitHub followers](https://img.shields.io/github/followers/Groupeak?style=social)
 
 ## 📑 Оглавление
 - [👥 О нас](#-о-нас)
