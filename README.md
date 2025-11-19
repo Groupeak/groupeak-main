@@ -1,13 +1,5 @@
 # 👥 **Groupeak team**
 
-<div align="center">
-  <img src="assets/Icon.PNG" alt="Логотип" width="35%"" />
-  <br></br>
-</div>
-
-![Stars](https://img.shields.io/github/stars/Groupeak?style=social)
-![GitHub followers](https://img.shields.io/github/followers/Groupeak?style=social)
-
 ## 📑 Оглавление
 - [👥 О нас](#-о-нас)
 - [🎯 Наша цель](#-наша-цель)
