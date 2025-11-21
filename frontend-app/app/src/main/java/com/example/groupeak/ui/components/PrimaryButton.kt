@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.groupeak.ui.theme.GothamFontFamily
+import com.example.groupeak.ui.theme.GroupeakBlue
 
 @Composable
 fun PrimaryButton(
@@ -27,14 +28,14 @@ fun PrimaryButton(
             .height(58.dp),
         shape = RoundedCornerShape(18.dp),      // скругление 18
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color(0xFF00A9FF), // #00A9FF
+            containerColor = GroupeakBlue, // #00A9FF
             contentColor = Color.White
         )
     ) {
         Text(
             text = text,
             fontSize = 24.sp,
-            fontWeight = FontWeight.Medium,
+            fontWeight = FontWeight.Normal,
             fontFamily = GothamFontFamily
         )
     }
