@@ -1,5 +1,5 @@
 package com.example.groupeak.ui.components
-
+// тест гит хаба
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
