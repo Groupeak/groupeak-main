@@ -51,6 +51,7 @@ vendor/
 target/
 .gradle/
 build/
+!frontend-app/gradle/wrapper/gradle-wrapper.jar
 
 # Maven
 .mvn/
