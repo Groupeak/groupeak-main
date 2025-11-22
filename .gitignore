@@ -49,7 +49,6 @@ vendor/
 *.ear
 *.iml
 target/
-gradle/
 .gradle/
 build/
 
