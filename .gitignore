@@ -35,6 +35,8 @@ dist/
 *.out
 go.work
 go.work.sum
+go.mod 
+go.sum
 
 # Go modules
 vendor/
