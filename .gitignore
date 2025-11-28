@@ -25,22 +25,6 @@ env/
 .venv/
 
 # ---------------------------
-# Golang
-# ---------------------------
-bin/
-build/
-dist/
-*.exe
-*.test
-*.out
-go.work
-go.work.sum
-
-# Go modules
-vendor/
-
-
-# ---------------------------
 # Java / Kotlin
 # ---------------------------
 *.class
@@ -57,17 +41,6 @@ build/
 mvnw.cmd
 mvnw
 
-
-# Visual Studio
-.vs/
-*.suo
-*.cache
-*.userprefs
-
-# Rider / ReSharper
-.idea/
-*.DotSettings.user
-
 # ---------------------------
 # Docker
 # ---------------------------
@@ -75,16 +48,6 @@ docker-data/
 docker-compose.override.yml
 .docker/
 *.tar
-
-# ---------------------------
-# Databases
-# ---------------------------
-*.sqlite
-*.sqlite3
-*.db
-*.sql.journal
-*.mdb
-*.log
 
 # ---------------------------
 # Images / Media Cache
@@ -129,24 +92,6 @@ Desktop.ini
 export/
 design/
 renders/
-
-# ---------------------------
-# Unity / Unreal Engine
-# ---------------------------
-Library/
-Temp/
-Obj/
-Logs/
-Build/
-Builds/
-UserSettings/
-MemoryCaptures/
-*.unitypackage
-
-# Unreal
-Saved/
-Intermediate/
-DerivedDataCache/
 
 # ---------------------------
 # Archives
