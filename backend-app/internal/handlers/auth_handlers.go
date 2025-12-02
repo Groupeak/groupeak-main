@@ -1,6 +1,78 @@
 package handlers
 
+import (
+	"encoding/json"
+	"errors"
+	"net/http"
+
+	"groupeak/internal/models"
+	"groupeak/internal/services"
+)
 
 type AuthHandler struct {
-	
+	authService *services.AuthService
 }
+
+func NewAuthHandler(authService *services.AuthService) *AuthHandler {
+	return &AuthHandler{
+		authService: authService,
+	}
+}
+
+func writeJSON(write http.ResponseWriter, status int, data interface{}) {
+	write.Header().Set("Content-Type", "application/json; charset=utf-8")
+	write.WriteHeader(status)
+	_ = json.NewEncoder(write).Encode(data)
+}
+
+func writeError(write http.ResponseWriter, status int, msg string) {
+	writeJSON(write, status, map[string]string{
+		"error": msg,
+	})
+}
+
+// Register — HTTP-эндпоинт регистрации.
+func (h *AuthHandler) Register(write http.ResponseWriter, r *http.Request) {
+	var req models.RegisterRequest
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(write, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	resp, err := h.authService.Register(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrEmailAlreadyTaken):
+			writeError(write, http.StatusConflict, "email already taken")
+			return
+		case errors.Is(err, services.ErrInvalidPosition):
+			writeError(write, http.StatusBadRequest, "invalid position")
+			return
+		case errors.Is(err, services.ErrMissingFields):
+			writeError(write, http.StatusBadRequest, err.Error())
+			return
+		default:
+			writeError(write, http.StatusInternalServerError, "internal server error")
+			return
+		}
+	}
+
+	writeJSON(write, http.StatusCreated, resp)
+}
+
+/*
+	=== ЗОНА ДЛЯ ВТОРОГО РАЗРАБОТЧИКА (LOGIN ХЕНДЛЕР) ===
+
+	Здесь можно добавить метод Login, который:
+
+	- читает из JSON email и password,
+	- вызывает authService.Login(ctx, email, password),
+	- отдаёт токен и инфу о пользователе.
+
+	Пример сигнатуры (без реализации):
+
+	func (h *AuthHandler) Login(write http.ResponseWriter, r *http.Request) {
+		// ...
+	}
+*/
