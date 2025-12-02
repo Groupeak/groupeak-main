@@ -1,7 +1,41 @@
 package main
 
-// входная и выходная точка приложения
+import (
+	"log"
+	"net/http"
+
+	"groupeak/internal/config"
+	"groupeak/internal/db"
+	"groupeak/internal/handlers"
+	"groupeak/internal/router"
+	"groupeak/internal/services"
+)
 
 func main() {
+	// 1. Загружаем конфиг.
+	cfg := config.Load()
 
+	// 2. Подключаемся к Postgres.
+	pgDB, err := db.NewPostgres(cfg.DBDsn)
+	if err != nil {
+		log.Fatalf("cannot connect to postgres: %v", err)
+	}
+	defer pgDB.Close()
+
+	// 3. Создаём сервисы.
+	authService := services.NewAuthService(pgDB, cfg.JWTToken)
+
+	// 4. Создаём хендлеры.
+	authHandler := handlers.NewAuthHandler(authService)
+
+	// 5. Собираем роутер.
+	r := router.NewRouter(authHandler)
+
+	// 6. Запускаем сервер.
+	addr := ":" + cfg.HTTPPort
+	log.Printf("starting HTTP server on %s\n", addr)
+
+	if err := http.ListenAndServe(addr, r); err != nil {
+		log.Fatalf("ListenAndServe: %v", err)
+	}
 }
