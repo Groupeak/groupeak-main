@@ -16,7 +16,7 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.components.GroupeakWordmark
 import com.example.groupeak.ui.components.PrimaryButton
-import com.example.groupeak.ui.theme.GothamFontFamily
+import com.example.groupeak.ui.theme.OnestFontFamily
 import com.example.groupeak.ui.theme.GroupeakBlue
 
 @Composable
@@ -56,7 +56,7 @@ fun StartScreen(
             Text(
                 text = "Создавайте и выполняйте\nпроекты вместе с нами!",
                 fontSize = 18.sp,
-                fontFamily = GothamFontFamily,
+                fontFamily = OnestFontFamily,
                 color = Color(0xFF4F5152),
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
@@ -76,7 +76,7 @@ fun StartScreen(
             Text(
                 text = "Нет аккаунта?",
                 fontSize = 18.sp,
-                fontFamily = GothamFontFamily,
+                fontFamily = OnestFontFamily,
                 color = GroupeakBlue,
                 modifier = Modifier
                     .clickable { onRegisterClick() }

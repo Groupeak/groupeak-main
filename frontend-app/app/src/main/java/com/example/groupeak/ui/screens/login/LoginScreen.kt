@@ -25,9 +25,9 @@ import com.example.groupeak.ui.components.GroupeakWordmark
 import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.components.InputField
 import com.example.groupeak.ui.components.PasswordInputField
-import com.example.groupeak.ui.theme.GothamFontFamily
+import com.example.groupeak.ui.theme.OnestFontFamily
+import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.GroupeakBlue
-
 @Composable
 fun LoginScreen(
     onBack: () -> Unit,
@@ -79,13 +79,13 @@ fun LoginScreen(
                 GroupeakWordmark()
             }
 
-            // Заголовок "Вход"
+            // Заголовок "Авторизация"
             Text(
-                text = "Вход",
+                text = "Авторизация",
                 fontSize = 32.sp,
                 fontWeight = FontWeight.Normal,
-                fontFamily = GothamFontFamily,
-                color = GroupeakBlue,
+                fontFamily = OnestFontFamily,
+                color = BluePrimary300,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
 
@@ -121,8 +121,8 @@ fun LoginScreen(
             Text(
                 text = "Забыли пароль?",
                 fontSize = 20.sp,
-                color = GroupeakBlue,
-                fontFamily = GothamFontFamily,
+                color = BluePrimary300,
+                fontFamily = OnestFontFamily,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
                     .fillMaxWidth()

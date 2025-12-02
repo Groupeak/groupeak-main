@@ -16,7 +16,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.groupeak.ui.theme.GroupeakBlue
-
+import com.example.groupeak.ui.theme.Gray650
+import com.example.groupeak.ui.theme.Gray700
 @Composable
 fun InputField(
     value: String,
@@ -39,7 +40,7 @@ fun InputField(
             Text(
                 text = placeholder,
                 fontSize = 16.sp,
-                color = Color(0xFF8F8F8F)
+                color = Gray650
             )
         },
         leadingIcon = {
@@ -50,7 +51,7 @@ fun InputField(
                     modifier = Modifier
                         .width(24.dp)
                         .height(24.dp),
-                    tint = GroupeakBlue
+                    tint = Gray700
                 )
             }
         },

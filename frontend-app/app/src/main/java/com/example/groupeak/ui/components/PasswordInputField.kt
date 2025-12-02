@@ -14,7 +14,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import com.example.groupeak.R
-import com.example.groupeak.ui.theme.GroupeakBlue
+import com.example.groupeak.ui.theme.Gray700
 
 @Composable
 fun PasswordInputField(
@@ -50,7 +50,7 @@ fun PasswordInputField(
                     .clickable { passwordVisible = !passwordVisible }
                     .then(Modifier)
                 ,
-                tint = GroupeakBlue
+                tint = Gray700
             )
         }
     )

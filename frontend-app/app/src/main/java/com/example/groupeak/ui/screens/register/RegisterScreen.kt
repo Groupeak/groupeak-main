@@ -1,5 +1,6 @@
 package com.example.groupeak.ui.screens.register
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.clickable
@@ -7,10 +8,12 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -18,169 +21,131 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-
+import com.example.groupeak.R
+import com.example.groupeak.ui.components.GroupeakBackground
+import com.example.groupeak.ui.components.GroupeakWordmark
+import com.example.groupeak.ui.components.InputField
+import com.example.groupeak.ui.components.PasswordInputField
+import com.example.groupeak.ui.components.PrimaryButton
+import com.example.groupeak.ui.theme.OnestFontFamily
+import com.example.groupeak.ui.theme.GroupeakBlue
+import com.example.groupeak.ui.theme.BluePrimary300
+import com.example.groupeak.ui.theme.Gray600
 @Composable
 fun RegisterScreen(
     onBack: () -> Unit,
     onForgotPassword: () -> Unit = {},
     onLogin: (String, String) -> Unit = { _, _ -> }
 ) {
-    var email by rememberSaveable { mutableStateOf("") }
-    var password by rememberSaveable { mutableStateOf("") }
-    var passwordVisible by rememberSaveable { mutableStateOf(false) }
+    var FIO by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var secondPassword by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
 
-    val primaryBlue = Color(0xFF48A8FF)
-    val gradientTop = Color(0xFFF6FBFF)
-    val gradientBottom = Color(0xFFFDF3F7)
+    GroupeakBackground(
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(gradientTop, gradientBottom)
-                )
-            )
-            .padding(horizontal = 24.dp, vertical = 16.dp)
     ) {
-        // Стрелка "назад"
-        Text(
-            text = "←",
-            fontSize = 24.sp,
-            color = primaryBlue,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(top = 8.dp)
-                .clickable { onBack() }
-        )
-
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 24.dp),
+            modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Лого + название (сюда потом вставишь Image с PNG)
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(top = 24.dp, bottom = 40.dp)
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 70.dp, bottom = 50.dp, start = 20.dp, end = 20.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Box(
+
+                Icon(
+                    painter = painterResource(id = com.example.groupeak.R.drawable.ic_back_arrow),
+                    contentDescription = "Назад",
+                    tint = GroupeakBlue,
                     modifier = Modifier
-                        .size(56.dp)
-                        .background(Color(0x3348A8FF), shape = MaterialTheme.shapes.large)
+                        .align(Alignment.CenterStart)
+                        .size(24.dp)
+                        .clickable { onBack() }
                 )
 
-                Spacer(modifier = Modifier.width(12.dp))
 
-                Text(
-                    text = "Groupeak",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = primaryBlue
+                GroupeakWordmark(
+                    modifier = Modifier.align(Alignment.Center),
+                    fontSize = 24.sp
                 )
             }
 
-            // Заголовок "Вход"
+            Spacer(modifier = Modifier.height(164.dp))
+
+            // Заголовок "Регистрация"
             Text(
-                text = "Вход",
-                fontSize = 26.sp,
-                fontWeight = FontWeight.Medium,
-                color = primaryBlue,
+                text = "Регистрация",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Normal,
+                fontFamily = OnestFontFamily,
+                color = BluePrimary300,
                 modifier = Modifier.padding(bottom = 32.dp)
             )
 
-            // Поле Email
-            TextField(
-                value = email,
-                onValueChange = { email = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Email") },
-                leadingIcon = { Text("✉") }, // потом заменишь на иконку email.png
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    cursorColor = primaryBlue
-                )
+            // FIO
+            InputField(
+                value = FIO,
+                onValueChange = { FIO = it },
+                placeholder = "ФИО",
+                iconResId = com.example.groupeak.R.drawable.ic_fio,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Поле Пароль
-            TextField(
+            // email
+            InputField(
+                value = email,
+                onValueChange = { email = it },
+                placeholder = "Email",
+                iconResId = com.example.groupeak.R.drawable.ic_email,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            // Пароль
+            PasswordInputField(
                 value = password,
                 onValueChange = { password = it },
-                modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Пароль") },
-                leadingIcon = { Text("🔒") }, // потом заменишь на lock.png
-                trailingIcon = {
-                    Text(
-                        text = if (passwordVisible) "👁" else "👁‍🗨",
-                        modifier = Modifier.clickable {
-                            passwordVisible = !passwordVisible
-                        }
-                    ) // сюда потом eye_on / eye_off.png
-                },
-                singleLine = true,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                visualTransformation = if (passwordVisible) {
-                    VisualTransformation.None
-                } else {
-                    PasswordVisualTransformation()
-                },
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White,
-                    disabledContainerColor = Color.White,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
-                    disabledIndicatorColor = Color.Transparent,
-                    cursorColor = primaryBlue
-                )
+                placeholder = "Пароль",
+                lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            // Потверждение Пароля
+            PasswordInputField(
+                value = secondPassword,
+                onValueChange = { secondPassword = it },
+                placeholder = "Потверждение Пароля",
+                lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
             )
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Кнопка "Войти"
-            Button(
+            // Кнопка "Зарегистрироваться"
+            PrimaryButton(
+                text = "Зарегистрироваться",
                 onClick = { onLogin(email, password) },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                shape = MaterialTheme.shapes.extraLarge,
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = primaryBlue,
-                    contentColor = Color.White
-                )
-            ) {
-                Text(
-                    text = "Войти",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Medium
-                )
-            }
+                fontSize = 20.sp
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // "Забыли пароль?"
             Text(
-                text = "Забыли пароль?",
-                fontSize = 15.sp,
-                color = primaryBlue,
+                text = "Есть аккаунт?",
+                fontSize = 20.sp,
+                color = BluePrimary300,
+                fontFamily = OnestFontFamily,
                 textAlign = TextAlign.Center,
+                fontWeight = FontWeight.Normal,
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { onForgotPassword() }
             )
+
         }
     }
 }

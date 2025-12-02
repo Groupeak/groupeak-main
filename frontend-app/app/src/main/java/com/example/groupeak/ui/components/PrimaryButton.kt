@@ -12,14 +12,16 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.groupeak.ui.theme.GothamFontFamily
-import com.example.groupeak.ui.theme.GroupeakBlue
-
+import com.example.groupeak.ui.theme.OnestFontFamily
+import com.example.groupeak.ui.theme.BluePrimary300
+import androidx.compose.ui.unit.TextUnit
+import androidx.compose.foundation.layout.PaddingValues
 @Composable
 fun PrimaryButton(
     text: String,
     modifier: Modifier = Modifier,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    fontSize: TextUnit = 24.sp
 ) {
     Button(
         onClick = onClick,
@@ -28,15 +30,16 @@ fun PrimaryButton(
             .height(58.dp),
         shape = RoundedCornerShape(18.dp),      // скругление 18
         colors = ButtonDefaults.buttonColors(
-            containerColor = GroupeakBlue, // #00A9FF
+            containerColor = BluePrimary300,
             contentColor = Color.White
-        )
+        ),
+        contentPadding = PaddingValues(0.dp)
     ) {
         Text(
             text = text,
-            fontSize = 24.sp,
-            fontWeight = FontWeight.Normal,
-            fontFamily = GothamFontFamily
+            fontSize = fontSize,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = OnestFontFamily
         )
     }
 }

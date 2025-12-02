@@ -5,7 +5,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import com.example.groupeak.R
 
-val GothamFontFamily = FontFamily(
-    Font(R.font.gotham_book, FontWeight.Normal),
-    Font(R.font.gotham_medium, FontWeight.Medium)
+val OnestFontFamily = FontFamily(
+    Font(R.font.onest_light, FontWeight.Light),
+    Font(R.font.onest_regular, FontWeight.Normal),
+    Font(R.font.onest_semibold, FontWeight.SemiBold)
 )
