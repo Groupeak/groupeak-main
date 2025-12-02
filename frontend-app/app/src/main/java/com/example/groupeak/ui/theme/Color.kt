@@ -13,7 +13,7 @@ val Pink40 = Color(0xFF7D5260)
 val GroupeakBlue = Color(0xFF00A9FF)
 val GroupeakGradientBlueLight = Color(0xFF01A8FF)
 val GroupeakGradientBlueDark = Color(0xFF1673FF)
-val GroupeakGradientPurple = Color(0xFFFE7D8A)
+val GroupeakGradientPurple = Color(0xFFC26CC3)
 val GroupeakGradientOrange = Color(0xFFFE7D8A)
 val GroupeakGradientWhite85 = Color.White.copy(alpha = 0.85f)
 
