@@ -9,7 +9,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.sp
 import androidx.compose.material3.Text
-import com.example.groupeak.ui.theme.GothamFontFamily
+import com.example.groupeak.ui.theme.OnestFontFamily
 import com.example.groupeak.ui.theme.GroupeakGradientBlueLight
 import com.example.groupeak.ui.theme.GroupeakGradientBlueDark
 import com.example.groupeak.ui.theme.GroupeakGradientPurple
@@ -37,8 +37,8 @@ fun GroupeakWordmark (
         style = TextStyle(
             brush = gradient,
             fontSize = fontSize,
-            fontWeight = FontWeight.Medium,
-            fontFamily = GothamFontFamily
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = OnestFontFamily
         )
     )
 }
