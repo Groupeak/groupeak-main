@@ -119,7 +119,7 @@ fun RegisterScreen(
             PasswordInputField(
                 value = secondPassword,
                 onValueChange = { secondPassword = it },
-                placeholder = "Потверждение Пароля",
+                placeholder = "Потверждение пароля",
                 lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
             )
 
