@@ -52,6 +52,15 @@ func (h *AuthHandler) Register(write http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, services.ErrMissingFields):
 			writeError(write, http.StatusBadRequest, err.Error())
 			return
+		case errors.Is(err, services.ErrWeakPassword):
+			writeError(write, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, services.ErrInvalidEmail):
+			writeError(write, http.StatusBadRequest, err.Error())
+			return
+		case errors.Is(err, services.ErrUnsupportedEmailDomain):
+			writeError(write, http.StatusBadRequest, err.Error())
+			return
 		default:
 			writeError(write, http.StatusInternalServerError, "internal server error")
 			return
