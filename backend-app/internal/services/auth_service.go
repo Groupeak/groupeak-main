@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"groupeak/internal/models"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -13,11 +14,29 @@ import (
 )
 
 var (
-	ErrEmailAlreadyTaken = errors.New("email already taken")
-	ErrInvalidPosition = errors.New("invalid position")
-	ErrMissingFields = errors.New("full_name, email and password are required")
+    ErrEmailAlreadyTaken = errors.New("email already taken")
+    ErrInvalidPosition = errors.New("invalid position")
+    ErrMissingFields = errors.New("full_name, email and password are required")
+    ErrWeakPassword = errors.New("password must be at least 8 characters long")
+    ErrInvalidEmail = errors.New("invalid email format")
+    ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
 )
 
+var allowedDomains = map[string]bool{
+	"yandex.ru": true,
+	"yandex.com": true,
+	"ya.ru": true,
+	"mail.ru": true,
+	"inbox.ru": true,
+	"rambler.ru": true,
+	"gmail.com": true,
+	"googlemail.com": true,
+	"outlook.com": true,
+	"icloud.com": true,
+	"yahoo.com": true,
+	"mail.com": true,
+	"sfedu.ru": true,
+}
 type jwtClaims struct {
 	UserID int64 `json:"user_id"`
 	Email string `json:"email"`
@@ -48,6 +67,25 @@ func validatePosition(position string) bool {
 	default:
 		return false
 	}
+}
+
+func normalizeAndValidateEmail(email string) (string, error) {
+    email = strings.ToLower(strings.TrimSpace(email))
+    if email == "" {
+        return "", ErrInvalidEmail
+    }
+
+    parts := strings.Split(email, "@")
+    if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+        return "", ErrInvalidEmail
+    }
+
+    domain := parts[1]
+    if !allowedDomains[domain] {
+        return "", ErrUnsupportedEmailDomain
+    }
+
+    return email, nil
 }
 
 func hashPassword(plain string) (string, error) {
@@ -89,16 +127,25 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, ErrMissingFields
 	}
 
+	if len(req.Password) < 8 {
+		return nil, ErrWeakPassword
+	}
+
 	if !validatePosition(req.Position) {
 		return nil, ErrInvalidPosition
 	}
 
+	email, err := normalizeAndValidateEmail(req.Email)
+	if err != nil {
+		return nil, err
+	}
+
 	var exists bool
 
-	err := s.db.QueryRowContext(
+	err = s.db.QueryRowContext(
 		ctx,
 		`SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`,
-		req.Email,
+		email,
 	).Scan(&exists)
 	if err != nil {
 		return nil, fmt.Errorf("check email exists: %w", err)
@@ -116,8 +163,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	query := `
 		INSERT INTO users (full_name, avatar_url, email, password_hash, position)
 		VALUES ($1, $2, $3, $4, $5)
-		RETURNING id, full_name, avatar_url, email, position, created_at, updated_at;
-	`
+		RETURNING id, full_name, avatar_url, email, position, created_at, updated_at;`
 
 	var (
 		user models.User
@@ -125,7 +171,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		avatarParam interface{}
 	)
 
-	if req.AvatarURL != nil {
+	if req.AvatarURL != nil && *req.AvatarURL != "" {
 		avatarParam = *req.AvatarURL
 	} else {
 		avatarParam = nil
@@ -136,7 +182,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		query,
 		req.FullName,
 		avatarParam,
-		req.Email,
+		email,
 		passwordHash,
 		req.Position,
 	).Scan(
@@ -168,6 +214,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 
 	return resp, nil
 }
+
 
 /*
 	=== ЗОНА ДЛЯ ВТОРОГО РАЗРАБОТЧИКА (АВТОРИЗАЦИЯ) ===
