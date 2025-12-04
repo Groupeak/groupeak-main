@@ -89,6 +89,7 @@ fun RegisterScreen(
             InputField(
                 value = FIO,
                 onValueChange = { FIO = it },
+                label = "ФИО",
                 placeholder = "ФИО",
                 iconResId = com.example.groupeak.R.drawable.ic_fio,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -100,6 +101,7 @@ fun RegisterScreen(
             InputField(
                 value = email,
                 onValueChange = { email = it },
+                label = "Email",
                 placeholder = "Email",
                 iconResId = com.example.groupeak.R.drawable.ic_email,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -110,6 +112,7 @@ fun RegisterScreen(
             PasswordInputField(
                 value = password,
                 onValueChange = { password = it },
+                label = "Пароль",
                 placeholder = "Пароль",
                 lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
             )
@@ -118,6 +121,7 @@ fun RegisterScreen(
             // Потверждение Пароля
             PasswordInputField(
                 value = secondPassword,
+                label = "Пароль",
                 onValueChange = { secondPassword = it },
                 placeholder = "Потверждение пароля",
                 lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
