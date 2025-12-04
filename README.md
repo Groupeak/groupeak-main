@@ -1,4 +1,4 @@
-# Структура фронтенда Groupeak (Android / Jetpack Compose)
+# Структура фронтенда (Android / Jetpack Compose)
 
 Основной модуль: `app`
 
