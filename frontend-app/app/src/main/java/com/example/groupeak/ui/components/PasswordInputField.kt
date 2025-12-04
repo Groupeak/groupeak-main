@@ -25,7 +25,8 @@ fun PasswordInputField(
     label: String? = null,
     onValueChange: (String) -> Unit,
     placeholder: String = "Пароль",
-    lockIconResId: Int? = null
+    lockIconResId: Int? = null,
+    isError: Boolean = false
 ) {
     var passwordVisible by remember { mutableStateOf(false) }
 
@@ -55,6 +56,7 @@ fun PasswordInputField(
                 },
                 tint = Gray700
             )
-        }
+        },
+        isError = isError
     )
 }
