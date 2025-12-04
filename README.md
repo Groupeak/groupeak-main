@@ -31,6 +31,7 @@ app/
             ├── Fonts.kt
             ├── Theme.kt
             └── Type.kt
+```
 
 ---
 
