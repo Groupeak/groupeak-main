@@ -7,7 +7,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -16,8 +15,9 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.components.GroupeakWordmark
 import com.example.groupeak.ui.components.PrimaryButton
+import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.OnestFontFamily
-import com.example.groupeak.ui.theme.GroupeakBlue
+import com.example.groupeak.ui.theme.GroupeakGray
 
 @Composable
 fun StartScreen(
@@ -40,13 +40,13 @@ fun StartScreen(
                 Image(
                     painter = painterResource(id = R.drawable.logo_groupeak),
                     contentDescription = "Логотип Groupeak",
-                    modifier = Modifier.size(200.dp)
+                    modifier = Modifier.size(230.dp)
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
 
                 GroupeakWordmark(
-                    fontSize = 36.sp
+                    fontSize = 48.sp
                 )
             }
 
@@ -54,10 +54,10 @@ fun StartScreen(
 
             // Слоган
             Text(
-                text = "Создавайте и выполняйте\nпроекты вместе с нами!",
-                fontSize = 18.sp,
+                text = "Работа в команде и\nотслеживание задач",
+                fontSize = 20.sp,
                 fontFamily = OnestFontFamily,
-                color = Color(0xFF4F5152),
+                color = GroupeakGray,
                 textAlign = TextAlign.Center,
                 modifier = Modifier.fillMaxWidth()
             )
@@ -75,9 +75,9 @@ fun StartScreen(
             // Ссылка "Нет аккаунта?"
             Text(
                 text = "Нет аккаунта?",
-                fontSize = 18.sp,
+                fontSize = 20.sp,
                 fontFamily = OnestFontFamily,
-                color = GroupeakBlue,
+                color = BluePrimary300,
                 modifier = Modifier
                     .clickable { onRegisterClick() }
                     .padding(top = 4.dp),
