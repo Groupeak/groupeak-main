@@ -59,24 +59,11 @@ fun LoginScreen(
                         .align(Alignment.CenterStart)
                         .clickable { onBack() }
                 )
-            }
 
-            // Лого + название
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(top = 16.dp, bottom = 40.dp)
-            ) {
-                // Логотип
-                Image(
-                    painter = painterResource(id = R.drawable.logo_groupeak),
-                    contentDescription = "Логотип Groupeak",
-                    modifier = Modifier.size(120.dp)
+                GroupeakWordmark(
+                    modifier = Modifier.align(Alignment.Center),
+                    fontSize = 32.sp
                 )
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                GroupeakWordmark()
             }
 
             // Заголовок "Авторизация"
@@ -93,6 +80,7 @@ fun LoginScreen(
             InputField(
                 value = email,
                 onValueChange = { email = it },
+                label = "Email",
                 placeholder = "Email",
                 iconResId = R.drawable.ic_email,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
@@ -104,6 +92,7 @@ fun LoginScreen(
             PasswordInputField(
                 value = password,
                 onValueChange = { password = it },
+                label = "Пароль",
                 placeholder = "Пароль",
                 lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
             )
