@@ -15,12 +15,11 @@ import (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-        log.Println("no .env file found, using OS env only")
-    }
+		log.Println("no .env file found, using OS env only")
+	}
 
 	// 1. Загружаем конфиг.
-    cfg := config.Load()
-
+	cfg := config.Load()
 
 	// 2. Подключаемся к Postgres.
 	pgDB, err := db.NewPostgres(cfg.DBDsn)
