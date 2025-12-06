@@ -24,7 +24,7 @@ func NewRouter(authHandler *handlers.AuthHandler) http.Handler {
 			router.Post("/register", authHandler.Register)
 
 			// TODO (для второго разработчика):
-			// router.Post("/login", authHandler.Login)
+			router.Post("/login", authHandler.Login)
 		})
 
 		// TODO: сюда потом добавить /users, /projects, /tasks и т.д.
