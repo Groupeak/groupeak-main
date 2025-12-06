@@ -70,18 +70,33 @@ func (h *AuthHandler) Register(write http.ResponseWriter, r *http.Request) {
 	writeJSON(write, http.StatusCreated, resp)
 }
 
-/*
-	=== ЗОНА ДЛЯ ВТОРОГО РАЗРАБОТЧИКА (LOGIN ХЕНДЛЕР) ===
-
-	Здесь можно добавить метод Login, который:
-
-	- читает из JSON email и password,
-	- вызывает authService.Login(ctx, email, password),
-	- отдаёт токен и инфу о пользователе.
-
-	Пример сигнатуры (без реализации):
-
-	func (h *AuthHandler) Login(write http.ResponseWriter, r *http.Request) {
-		// ...
+// Login — HTTP-эндпоинт авторизации.
+func (h *AuthHandler) Login(write http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(write, http.StatusBadRequest, "invalid JSON body")
+		return
 	}
-*/
+
+	if req.Email == "" || req.Password == "" {
+		writeError(write, http.StatusBadRequest, "email and password are required")
+		return
+	}
+
+	resp, err := h.authService.Login(r.Context(), req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidEmail):
+			writeError(write, http.StatusBadRequest, err.Error())
+		case errors.Is(err, services.ErrUnsupportedEmailDomain):
+			writeError(write, http.StatusBadRequest, err.Error())
+		case errors.Is(err, services.ErrInvalidCredentials):
+			writeError(write, http.StatusUnauthorized, err.Error())
+		default:
+			writeError(write, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(write, http.StatusOK, resp)
+}
