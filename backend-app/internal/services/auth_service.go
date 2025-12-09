@@ -14,46 +14,46 @@ import (
 )
 
 var (
-	ErrEmailAlreadyTaken      = errors.New("email already taken")
-	ErrInvalidPosition        = errors.New("invalid position")
-	ErrMissingFields          = errors.New("full_name, email and password are required")
-	ErrWeakPassword           = errors.New("password must be at least 8 characters long")
-	ErrInvalidEmail           = errors.New("invalid email format")
+	ErrEmailAlreadyTaken = errors.New("email already taken")
+	ErrInvalidPosition = errors.New("invalid position")
+	ErrMissingFields = errors.New("full_name, email and password are required")
+	ErrWeakPassword = errors.New("password must be at least 8 characters long")
+	ErrInvalidEmail = errors.New("invalid email format")
 	ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
-	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrInvalidCredentials = errors.New("invalid credentials")
 )
 
 var allowedDomains = map[string]bool{
-	"yandex.ru":      true,
-	"yandex.com":     true,
-	"ya.ru":          true,
-	"mail.ru":        true,
-	"inbox.ru":       true,
-	"rambler.ru":     true,
-	"gmail.com":      true,
+	"yandex.ru": true,
+	"yandex.com": true,
+	"ya.ru": true,
+	"mail.ru": true,
+	"inbox.ru": true,
+	"rambler.ru": true,
+	"gmail.com": true,
 	"googlemail.com": true,
-	"outlook.com":    true,
-	"icloud.com":     true,
-	"yahoo.com":      true,
-	"mail.com":       true,
-	"sfedu.ru":       true,
+	"outlook.com": true,
+	"icloud.com": true,
+	"yahoo.com": true,
+	"mail.com": true,
+	"sfedu.ru": true,
 }
 
 type JWTClaims struct {
-	UserID   int64  `json:"user_id"`
-	Email    string `json:"email"`
+	UserID int64  `json:"user_id"`
+	Email string `json:"email"`
 	Position string `json:"position"`
 	jwt.RegisteredClaims
 }
 
 type AuthService struct {
-	db       *sql.DB
+	db *sql.DB
 	jwtToken []byte
 }
 
 func NewAuthService(db *sql.DB, jwtToken string) *AuthService {
 	return &AuthService{
-		db:       db,
+		db: db,
 		jwtToken: []byte(jwtToken),
 	}
 }
@@ -101,13 +101,13 @@ func hashPassword(plain string) (string, error) {
 func (s *AuthService) generateToken(user models.User) (string, error) {
 	now := time.Now()
 	claims := JWTClaims{
-		UserID:   user.ID,
-		Email:    user.Email,
+		UserID: user.ID,
+		Email: user.Email,
 		Position: user.Position,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   fmt.Sprint(user.ID),
+			Subject: fmt.Sprint(user.ID),
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
+			IssuedAt: jwt.NewNumericDate(now),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -149,11 +149,12 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, err
 	}
 	query := `
-INSERT INTO users (full_name, avatar_url, email, password_hash, position)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, full_name, avatar_url, email, position, created_at, updated_at;`
+	INSERT INTO users (full_name, avatar_url, email, password_hash, position)
+	VALUES ($1, $2, $3, $4, $5)
+	RETURNING id, full_name, avatar_url, email, position, created_at, updated_at;`
+
 	var (
-		user        models.User
+		user models.User
 		avatarField sql.NullString
 		avatarParam interface{}
 	)
