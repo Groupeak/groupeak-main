@@ -22,14 +22,14 @@ func main() {
 	cfg := config.Load()
 
 	// 2. Подключаемся к Postgres.
-	pgDB, err := db.NewPostgres(cfg.DBDsn)
+	sqlDB, err := db.NewPostgres(cfg.DBDsn, "./migrations")
 	if err != nil {
-		log.Fatalf("cannot connect to postgres: %v", err)
+		log.Fatalf("connect to db / run migrations: %v", err)
 	}
-	defer pgDB.Close()
+	defer sqlDB.Close()
 
 	// 3. Создаём сервисы.
-	authService := services.NewAuthService(pgDB, cfg.JWTToken)
+	authService := services.NewAuthService(sqlDB, cfg.JWTToken)
 
 	// 4. Создаём хендлеры.
 	authHandler := handlers.NewAuthHandler(authService)
