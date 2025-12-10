@@ -28,6 +28,7 @@ import com.example.groupeak.ui.components.PasswordInputField
 import com.example.groupeak.ui.theme.OnestFontFamily
 import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.GroupeakBlue
+
 @Composable
 fun LoginScreen(
     onBack: () -> Unit,
@@ -48,14 +49,14 @@ fun LoginScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 70.dp, bottom = 50.dp, start = 20.dp)
+                    .padding(top = 65.dp, bottom = 50.dp, start = 8.dp)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_back_arrow),
                     contentDescription = "Назад",
-                    tint = GroupeakBlue,
+                    tint = BluePrimary300,
                     modifier = Modifier
-                        .size(24.dp)
+                        .size(28.dp)
                         .align(Alignment.CenterStart)
                         .clickable { onBack() }
                 )
@@ -66,6 +67,8 @@ fun LoginScreen(
                 )
             }
 
+            //Spacer(modifier = Modifier.height(164.dp))
+
             // Заголовок "Авторизация"
             Text(
                 text = "Авторизация",
@@ -73,39 +76,42 @@ fun LoginScreen(
                 fontWeight = FontWeight.Normal,
                 fontFamily = OnestFontFamily,
                 color = BluePrimary300,
-                modifier = Modifier.padding(bottom = 32.dp)
+                modifier = Modifier.padding(top = 136.dp)
             )
 
             // Email
             InputField(
+                modifier = Modifier.padding(top = 30.dp),
                 value = email,
                 onValueChange = { email = it },
                 label = "Email",
-                placeholder = "Email",
+                placeholder = "",
                 iconResId = R.drawable.ic_email,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            //Spacer(modifier = Modifier.height(18.dp))
 
             // Пароль
             PasswordInputField(
+                modifier = Modifier.padding(top = 18.dp),
                 value = password,
                 onValueChange = { password = it },
                 label = "Пароль",
-                placeholder = "Пароль",
+                placeholder = "",
                 lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
             )
 
-            Spacer(modifier = Modifier.height(32.dp))
+            //Spacer(modifier = Modifier.height(32.dp))
 
             // Кнопка "Войти"
             PrimaryButton(
+                modifier = Modifier.padding(top = 30.dp),
                 text = "Войти",
                 onClick = { onLogin(email, password) }
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            //Spacer(modifier = Modifier.height(16.dp))
 
             Text(
                 text = "Забыли пароль?",
@@ -114,7 +120,8 @@ fun LoginScreen(
                 fontFamily = OnestFontFamily,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    //.fillMaxWidth()
+                    .padding(top = 15.dp)
                     .clickable { onForgotPassword() }
             )
         }
