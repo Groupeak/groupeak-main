@@ -10,14 +10,14 @@ import com.example.groupeak.ui.theme.GroupeakGradientBlueLight
 import com.example.groupeak.ui.theme.GroupeakGradientBlueDark
 import com.example.groupeak.ui.theme.GroupeakGradientOrange
 import com.example.groupeak.ui.theme.GroupeakGradientPurple
-import com.example.groupeak.ui.theme.GroupeakGradientWhite85
+import com.example.groupeak.ui.theme.White
 
 private val groupeakBackgroundBrush = Brush.verticalGradient(
     colorStops = arrayOf(
-        0.0f to GroupeakGradientBlueLight,
-        0.33f to GroupeakGradientBlueDark,
-        0.67f to GroupeakGradientPurple,
-        1.0f to GroupeakGradientOrange
+        0.0f to GroupeakGradientBlueLight.copy(alpha = 0.07f),
+        0.33f to GroupeakGradientBlueDark.copy(alpha = 0.07f),
+        0.67f to GroupeakGradientPurple.copy(alpha = 0.07f),
+        1.0f to GroupeakGradientOrange.copy(alpha = 0.07f)
     )
 )
 
@@ -28,14 +28,14 @@ fun GroupeakBackground(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(groupeakBackgroundBrush)
+            .background(White)
     )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(GroupeakGradientWhite85)
+            .background(groupeakBackgroundBrush)
     )
-    content()
 
+    content()
 }
