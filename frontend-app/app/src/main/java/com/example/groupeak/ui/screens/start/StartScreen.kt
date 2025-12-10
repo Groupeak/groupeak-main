@@ -29,9 +29,9 @@ fun StartScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(horizontal = 32.dp, vertical = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(40.dp))
+            Spacer(modifier = Modifier.height(165.dp))
 
             // Логотип + надпись Groupeak
             Column(
@@ -43,14 +43,14 @@ fun StartScreen(
                     modifier = Modifier.size(230.dp)
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(30.dp))
 
                 GroupeakWordmark(
                     fontSize = 48.sp
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
             // Слоган
             Text(
@@ -62,7 +62,7 @@ fun StartScreen(
                 modifier = Modifier.fillMaxWidth()
             )
 
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(modifier = Modifier.height(155.dp))
 
             // Кнопка "Войти"
             PrimaryButton(
@@ -70,7 +70,7 @@ fun StartScreen(
                 onClick = onLoginClick
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(15.dp))
 
             // Ссылка "Нет аккаунта?"
             Text(
@@ -84,7 +84,7 @@ fun StartScreen(
                 textAlign = TextAlign.Center
             )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(84.dp))
         }
     }
 }
