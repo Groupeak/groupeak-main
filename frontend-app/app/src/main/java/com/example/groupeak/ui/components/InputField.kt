@@ -24,6 +24,7 @@ import com.example.groupeak.ui.theme.Gray650
 import com.example.groupeak.ui.theme.Gray700
 import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.Gray600
+import com.example.groupeak.ui.theme.OnestFontFamily
 
 @Composable
 fun InputField(
@@ -66,6 +67,7 @@ fun InputField(
         placeholder = {
             Text(
                 text = placeholder,
+                fontFamily = OnestFontFamily,
                 fontSize = 16.sp,
                 color = when {
                     isError -> errorColor
