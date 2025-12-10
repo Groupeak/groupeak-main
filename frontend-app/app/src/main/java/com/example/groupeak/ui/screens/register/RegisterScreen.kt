@@ -48,16 +48,16 @@ fun RegisterScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 70.dp, bottom = 50.dp, start = 20.dp, end = 20.dp),
+                    .padding(top = 65.dp, bottom = 50.dp, start = 8.dp, end = 8.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_back_arrow),
                     contentDescription = "Назад",
-                    tint = GroupeakBlue,
+                    tint = BluePrimary300,
                     modifier = Modifier
                         .align(Alignment.CenterStart)
-                        .size(24.dp)
+                        .size(28.dp)
                         .clickable { onBack() }
                 )
 
@@ -67,7 +67,7 @@ fun RegisterScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(164.dp))
+            Spacer(modifier = Modifier.height(136.dp))
 
             // заголовок
             Text(
@@ -88,7 +88,7 @@ fun RegisterScreen(
                 iconResId = R.drawable.ic_fio
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Email
             InputField(
@@ -99,7 +99,7 @@ fun RegisterScreen(
                 iconResId = R.drawable.ic_email
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Пароль
             PasswordInputField(
@@ -114,7 +114,7 @@ fun RegisterScreen(
                 lockIconResId = R.drawable.ic_lock
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             // Подтверждение пароля
             PasswordInputField(
@@ -142,7 +142,7 @@ fun RegisterScreen(
                 )
             }
 
-            Spacer(modifier = Modifier.height(32.dp))
+            Spacer(modifier = Modifier.height(30.dp))
 
             // Кнопка "Зарегистрироваться"
             PrimaryButton(
@@ -162,7 +162,7 @@ fun RegisterScreen(
                 fontSize = 20.sp
             )
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(18.dp))
 
             Text(
                 text = "Есть аккаунт?",
@@ -172,7 +172,7 @@ fun RegisterScreen(
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Normal,
                 modifier = Modifier
-                    .fillMaxWidth()
+                    //.fillMaxWidth()
                     .clickable { onForgotPassword() }
             )
         }
