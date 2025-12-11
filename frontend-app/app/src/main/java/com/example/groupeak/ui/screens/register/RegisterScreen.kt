@@ -4,7 +4,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -20,25 +20,19 @@ import com.example.groupeak.ui.components.InputField
 import com.example.groupeak.ui.components.PasswordInputField
 import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.theme.BluePrimary300
-import com.example.groupeak.ui.theme.GroupeakBlue
 import com.example.groupeak.ui.theme.OnestFontFamily
 
 @Composable
 fun RegisterScreen(
+    state: RegisterUiState,
     onBack: () -> Unit,
     onForgotPassword: () -> Unit = {},
-    onLogin: (String, String) -> Unit = { _, _ -> }
+    onFioChange: (String) -> Unit,
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onSecondPasswordChange: (String) -> Unit,
+    onRegisterClick: () -> Unit,
 ) {
-    var fio by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-    var secondPassword by remember { mutableStateOf("") }
-    var email by remember { mutableStateOf("") }
-
-    // показывать ли ошибку "пароли не совпадают"
-    var showPasswordError by remember { mutableStateOf(false) }
-
-    val passwordsDoNotMatch = showPasswordError
-
     GroupeakBackground {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -81,8 +75,8 @@ fun RegisterScreen(
 
             // ФИО
             InputField(
-                value = fio,
-                onValueChange = { fio = it },
+                value = state.fio,
+                onValueChange = onFioChange,
                 label = "ФИО",
                 placeholder = "ФИО",
                 iconResId = R.drawable.ic_fio
@@ -92,8 +86,8 @@ fun RegisterScreen(
 
             // Email
             InputField(
-                value = email,
-                onValueChange = { email = it },
+                value = state.email,
+                onValueChange = onEmailChange,
                 label = "Email",
                 placeholder = "Email",
                 iconResId = R.drawable.ic_email
@@ -103,12 +97,8 @@ fun RegisterScreen(
 
             // Пароль
             PasswordInputField(
-                value = password,
-                onValueChange = {
-                    password = it
-                    // как только юзер меняет пароль — прячем старую ошибку
-                    if (showPasswordError) showPasswordError = false
-                },
+                value = state.password,
+                onValueChange = onPasswordChange,
                 label = "Пароль",
                 placeholder = "Пароль",
                 lockIconResId = R.drawable.ic_lock
@@ -118,18 +108,15 @@ fun RegisterScreen(
 
             // Подтверждение пароля
             PasswordInputField(
-                value = secondPassword,
+                value = state.secondPassword,
                 label = "Подтвердите пароль",
-                onValueChange = {
-                    secondPassword = it
-                    if (showPasswordError) showPasswordError = false
-                },
+                onValueChange = onSecondPasswordChange,
                 placeholder = "Подтверждение пароля",
                 lockIconResId = R.drawable.ic_lock,
-                isError = passwordsDoNotMatch
+                isError = state.passwordsDoNotMatch
             )
 
-            if (passwordsDoNotMatch) {
+            if (state.passwordsDoNotMatch) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = "Пароли не совпадают",
@@ -146,23 +133,30 @@ fun RegisterScreen(
 
             // Кнопка "Зарегистрироваться"
             PrimaryButton(
-                text = "Зарегистрироваться",
+                text = if (state.isLoading) "Загрузка..." else "Зарегистрироваться",
                 onClick = {
-                    val hasError =
-                        password.isNotEmpty() &&
-                                secondPassword.isNotEmpty() &&
-                                password != secondPassword
-
-                    showPasswordError = hasError
-
-                    if (!hasError) {
-                        onLogin(email, password)
+                    if (!state.isLoading) {
+                        onRegisterClick()
                     }
                 },
                 fontSize = 20.sp
             )
 
             Spacer(modifier = Modifier.height(18.dp))
+
+            // Ошибка с бэка (общая)
+            if (state.errorMessage != null) {
+                Text(
+                    text = state.errorMessage,
+                    color = Color(0xFFFF4D4F),
+                    fontSize = 14.sp,
+                    fontFamily = OnestFontFamily,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp, vertical = 4.dp)
+                )
+            }
 
             Text(
                 text = "Есть аккаунт?",
@@ -172,7 +166,6 @@ fun RegisterScreen(
                 textAlign = TextAlign.Center,
                 fontWeight = FontWeight.Normal,
                 modifier = Modifier
-                    //.fillMaxWidth()
                     .clickable { onForgotPassword() }
             )
         }
