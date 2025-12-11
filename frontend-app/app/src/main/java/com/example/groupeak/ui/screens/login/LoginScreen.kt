@@ -1,17 +1,11 @@
 package com.example.groupeak.ui.screens.login
 
-import androidx.compose.foundation.Image
-import com.example.groupeak.R
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
@@ -20,36 +14,34 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.components.GroupeakWordmark
-import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.components.InputField
 import com.example.groupeak.ui.components.PasswordInputField
-import com.example.groupeak.ui.theme.OnestFontFamily
+import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.theme.BluePrimary300
-import com.example.groupeak.ui.theme.GroupeakBlue
+import com.example.groupeak.ui.theme.OnestFontFamily
 
 @Composable
 fun LoginScreen(
+    state: LoginUiState,
     onBack: () -> Unit,
     onForgotPassword: () -> Unit = {},
-    onLogin: (String, String) -> Unit = { _, _ -> }
+    onEmailChange: (String) -> Unit,
+    onPasswordChange: (String) -> Unit,
+    onLoginClick: () -> Unit,
 ) {
-    var email by remember { mutableStateOf("") }
-    var password by remember { mutableStateOf("") }
-
-    GroupeakBackground(
-
-    ) {
+    GroupeakBackground {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Стрелка назад
+            // Стрелка назад + логотип
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 65.dp, bottom = 50.dp, start = 8.dp)
+                    .padding(top = 65.dp, bottom = 50.dp, start = 8.dp),
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_back_arrow),
@@ -67,8 +59,6 @@ fun LoginScreen(
                 )
             }
 
-            //Spacer(modifier = Modifier.height(164.dp))
-
             // Заголовок "Авторизация"
             Text(
                 text = "Авторизация",
@@ -82,37 +72,50 @@ fun LoginScreen(
             // Email
             InputField(
                 modifier = Modifier.padding(top = 30.dp),
-                value = email,
-                onValueChange = { email = it },
+                value = state.email,
+                onValueChange = onEmailChange,
                 label = "Email",
                 placeholder = "",
                 iconResId = R.drawable.ic_email,
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
             )
 
-            //Spacer(modifier = Modifier.height(18.dp))
-
             // Пароль
             PasswordInputField(
                 modifier = Modifier.padding(top = 18.dp),
-                value = password,
-                onValueChange = { password = it },
+                value = state.password,
+                onValueChange = onPasswordChange,
                 label = "Пароль",
                 placeholder = "",
-                lockIconResId = R.drawable.ic_lock // или null, если пока нет иконки
+                lockIconResId = R.drawable.ic_lock
             )
-
-            //Spacer(modifier = Modifier.height(32.dp))
 
             // Кнопка "Войти"
             PrimaryButton(
                 modifier = Modifier.padding(top = 30.dp),
-                text = "Войти",
-                onClick = { onLogin(email, password) }
+                text = if (state.isLoading) "Загрузка..." else "Войти",
+                onClick = {
+                    if (!state.isLoading) {
+                        onLoginClick()
+                    }
+                }
             )
 
-            //Spacer(modifier = Modifier.height(16.dp))
+            // Ошибка (если есть)
+            if (state.errorMessage != null) {
+                Text(
+                    text = state.errorMessage,
+                    fontSize = 14.sp,
+                    color = androidx.compose.ui.graphics.Color(0xFFFF4D4F),
+                    fontFamily = OnestFontFamily,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 32.dp, vertical = 8.dp)
+                )
+            }
 
+            // "Забыли пароль?"
             Text(
                 text = "Забыли пароль?",
                 fontSize = 20.sp,
@@ -120,7 +123,6 @@ fun LoginScreen(
                 fontFamily = OnestFontFamily,
                 textAlign = TextAlign.Center,
                 modifier = Modifier
-                    //.fillMaxWidth()
                     .padding(top = 15.dp)
                     .clickable { onForgotPassword() }
             )
