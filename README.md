@@ -6,7 +6,25 @@
 app/
 └── src/main/java/com/example/groupeak
     ├── MainActivity.kt
-    └── ui/
+
+    ├── data
+    │   └── remote
+    │       ├── api
+    │       │   ├── ApiClient.kt
+    │       │   └── AuthApi.kt
+    │       ├── dto
+    │       │   └── AuthDtos.kt
+    │       └── repository
+    │           └── AuthRepositoryImpl.kt
+
+    ├── domain
+    │   └── repository
+    │       └── AuthRepository.kt
+
+    ├── service_locator
+    │   └── ServiceLocator.kt
+
+    └── ui
         ├── components/
         │   ├── Background.kt
         │   ├── GroupeakWordmark.kt
@@ -22,9 +40,11 @@ app/
         │   ├── start/
         │   │   └── StartScreen.kt
         │   ├── login/
-        │   │   └── LoginScreen.kt
+        │   │   ├── LoginScreen.kt
+        │   │   └── LoginViewModel.kt
         │   └── register/
-        │       └── RegisterScreen.kt
+        │       ├── RegisterScreen.kt
+        │       └── RegisterViewModel.kt
         │
         └── theme/
             ├── Color.kt
@@ -284,3 +304,39 @@ app/
 > Для фронтенда важно: глобальная тема уже есть (`GroupeakTheme`), но кастомные цвета и шрифт в основном задаются на уровне компонентов/экранов, а не через `MaterialTheme.colorScheme/typography`.
 
 ---
+
+## Сетевой слой и работа с backend
+
+Фронтенд теперь полностью интегрирован с backend (Go + PostgreSQL) через Retrofit и OkHttp.
+
+- В пакете `data.remote.api` описан HTTP-клиент:
+  - `ApiClient` настраивает Retrofit и базовый URL сервера.
+  - `AuthApi` описывает эндпоинты `/api/v1/auth/register` и `/api/v1/auth/login`.
+
+- В `data.remote.dto` лежат DTO-модели для запросов и ответов авторизации:
+  - запросы `RegisterRequest` и `LoginRequest`;
+  - ответ `AuthResponse` с полями `user` и `token`.
+
+- В `domain.repository` находится интерфейс `AuthRepository` — абстракция над авторизацией без привязки к сети.
+
+- В `data.remote.repository` реализован `AuthRepositoryImpl`, который:
+  - вызывает методы `AuthApi`;
+  - оборачивает результат в `Result<AuthResponse>`;
+  - знает о разрешённых позициях пользователя (`backend`, `frontend`, `uiux`, `pm`).
+
+- В `service_locator.ServiceLocator` создаётся один экземпляр `AuthRepository`, который переиспользуется во всём приложении.
+
+---
+
+## Навигация и экраны авторизации
+
+- `AppNavGraph`:
+  - описывает граф навигации между `Start`, `Login` и `Register`;
+  - создаёт `LoginViewModel` и `RegisterViewModel` через фабрики, передавая им `AuthRepository` из `ServiceLocator`;
+  - после успешной регистрации переводит пользователя на экран логина;
+  - после успешного логина пока возвращает на стартовый экран (в будущем здесь можно вывести основной экран приложения).
+
+- `LoginScreen` и `RegisterScreen`:
+  - являются «тупыми» UI-экранами и не работают напрямую с сетью;
+  - получают состояние (`LoginUiState`, `RegisterUiState`) и колбэки из соответствующих ViewModel’ей;
+  - показывают ошибки (неверные данные, несовпадающие пароли, общие ошибки сети) и индикатор загрузки через текст и состояние кнопок.
