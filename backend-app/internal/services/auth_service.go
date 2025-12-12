@@ -21,6 +21,7 @@ var (
 	ErrInvalidEmail = errors.New("invalid email format")
 	ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
 	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidBirthDate = errors.New("invalid birth date, expected format dd.mm.yyyy")
 )
 
 var allowedDomains = map[string]bool{
@@ -128,10 +129,33 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if !validatePosition(req.Position) {
 		return nil, ErrInvalidPosition
 	}
+
 	email, err := normalizeAndValidateEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
+
+	// разбор birth_date (опционально)
+	var birthDateParam interface{}
+	if req.BirthDate != nil && strings.TrimSpace(*req.BirthDate) != "" {
+		bdStr := strings.TrimSpace(*req.BirthDate)
+		parsed, err := time.Parse("02.01.2006", bdStr)
+		if err != nil {
+			return nil, ErrInvalidBirthDate
+		}
+		birthDateParam = parsed
+	} else {
+		birthDateParam = nil
+	}
+
+	// about (опционально)
+	var aboutParam interface{}
+	if req.About != nil && strings.TrimSpace(*req.About) != "" {
+		aboutParam = strings.TrimSpace(*req.About)
+	} else {
+		aboutParam = nil
+	}
+
 	var exists bool
 	err = s.db.QueryRowContext(
 		ctx,
@@ -144,25 +168,32 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if exists {
 		return nil, ErrEmailAlreadyTaken
 	}
+
 	passwordHash, err := hashPassword(req.Password)
 	if err != nil {
 		return nil, err
 	}
+
 	query := `
-	INSERT INTO users (full_name, avatar_url, email, password_hash, position)
-	VALUES ($1, $2, $3, $4, $5)
-	RETURNING id, full_name, avatar_url, email, position, created_at, updated_at;`
+	INSERT INTO users (full_name, avatar_url, email, password_hash, position, birth_date, about)
+	VALUES ($1, $2, $3, $4, $5, $6, $7)
+	RETURNING id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at;
+	`
 
 	var (
 		user models.User
 		avatarField sql.NullString
 		avatarParam interface{}
+		birthDateField sql.NullTime
+		aboutField sql.NullString
 	)
+
 	if req.AvatarURL != nil && *req.AvatarURL != "" {
 		avatarParam = *req.AvatarURL
 	} else {
 		avatarParam = nil
 	}
+
 	err = s.db.QueryRowContext(
 		ctx,
 		query,
@@ -171,25 +202,40 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		email,
 		passwordHash,
 		req.Position,
+		birthDateParam,
+		aboutParam,
 	).Scan(
 		&user.ID,
 		&user.FullName,
 		&avatarField,
 		&user.Email,
 		&user.Position,
+		&birthDateField,
+		&aboutField,
 		&user.CreatedAt,
 		&user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("insert user: %w", err)
 	}
+
 	if avatarField.Valid {
 		user.AvatarURL = &avatarField.String
 	}
+	if birthDateField.Valid {
+		bd := birthDateField.Time.Format("02.01.2006")
+		user.BirthDate = &bd
+	}
+	if aboutField.Valid {
+		about := aboutField.String
+		user.About = &about
+	}
+
 	token, err := s.generateToken(user)
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
 	}
+
 	resp := &models.RegisterResponse{
 		User:  user,
 		Token: token,
@@ -203,12 +249,16 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*mode
 		return nil, err
 	}
 
-	var user models.User
-	var passwordHash string
-	var avatarField sql.NullString
+	var (
+		user models.User
+		passwordHash string
+		avatarField sql.NullString
+		birthDateField sql.NullTime
+		aboutField sql.NullString
+	)
 
 	err = s.db.QueryRowContext(ctx,
-		`SELECT id, full_name, avatar_url, email, position, password_hash, created_at, updated_at
+		`SELECT id, full_name, avatar_url, email, position, birth_date, about, password_hash, created_at, updated_at
 		FROM users WHERE email = $1`,
 		email,
 	).Scan(
@@ -217,6 +267,8 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*mode
 		&avatarField,
 		&user.Email,
 		&user.Position,
+		&birthDateField,
+		&aboutField,
 		&passwordHash,
 		&user.CreatedAt,
 		&user.UpdatedAt,
@@ -229,6 +281,14 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*mode
 
 	if avatarField.Valid {
 		user.AvatarURL = &avatarField.String
+	}
+	if birthDateField.Valid {
+		bd := birthDateField.Time.Format("02.01.2006")
+		user.BirthDate = &bd
+	}
+	if aboutField.Valid {
+		about := aboutField.String
+		user.About = &about
 	}
 
 	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
