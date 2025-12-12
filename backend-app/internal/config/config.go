@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"log"
 	"os"
 )
@@ -11,33 +10,37 @@ type Config struct {
 	DBDsn string
 	JWTToken string
 	HTTPPort string	
+	AppDomain string
 }
 
 
 func Load() Config {
-	host := os.Getenv("DB_HOST")
-	port := os.Getenv("DB_PORT")
-	user := os.Getenv("DB_USER")
-	password := os.Getenv("DB_PASSWORD")
-	name := os.Getenv("DB_NAME")
-	sslmode := os.Getenv("DB_SSLMODE")
+	httpPort := os.Getenv("APP_PORT")
 
-	if user == "" || name == "" {
+	dbUser := os.Getenv("DB_USER")
+	dbPass := os.Getenv("DB_PASSWORD")
+	dbHost := os.Getenv("DB_HOST")
+	dbPort := os.Getenv("DB_PORT")
+	dbName := os.Getenv("DB_NAME")
+	dbSSL := os.Getenv("DB_SSLMODE")
+
+	if dbUser == "" || dbName == "" {
 		log.Fatal("DB_USER or DB_NAME must be set")
 	}
 
-	dsn := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s", user, password, host, port, name, sslmode)
+	dsn := "postgres://" + dbUser + ":" + dbPass + "@" + dbHost + ":" + dbPort + "/" + dbName + "?sslmode=" + dbSSL
 
 	jwtToken := os.Getenv("JWT_TOKEN")
 	if jwtToken == "" {
-		log.Fatal("JWT token is not set")
+		log.Fatal("JWT_TOKEN must be set")
 	}
 
-	httpPort := os.Getenv("APP_PORT")
+	appDomain := os.Getenv("APP_DOMAIN")
 
-	return Config {
-		DBDsn: dsn,
-		JWTToken: jwtToken,
+	return Config{
 		HTTPPort: httpPort,
+		DBDsn:    dsn,
+		JWTToken: jwtToken,
+		AppDomain: appDomain,
 	}
 }
