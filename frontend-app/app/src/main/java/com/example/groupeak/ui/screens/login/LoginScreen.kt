@@ -69,7 +69,7 @@ fun LoginScreen(
                 modifier = Modifier.padding(top = 136.dp)
             )
 
-            // Email
+            // Email с ошибкой
             InputField(
                 modifier = Modifier.padding(top = 30.dp),
                 value = state.email,
@@ -77,17 +77,21 @@ fun LoginScreen(
                 label = "Email",
                 placeholder = "",
                 iconResId = R.drawable.ic_email,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                isError = state.emailError != null,
+                errorMessage = state.emailError
             )
 
-            // Пароль
+            // Пароль с ошибкой
             PasswordInputField(
                 modifier = Modifier.padding(top = 18.dp),
                 value = state.password,
                 onValueChange = onPasswordChange,
                 label = "Пароль",
                 placeholder = "",
-                lockIconResId = R.drawable.ic_lock
+                lockIconResId = R.drawable.ic_lock,
+                isError = state.passwordError != null,
+                errorMessage = state.passwordError
             )
 
             // Кнопка "Войти"
@@ -101,7 +105,7 @@ fun LoginScreen(
                 }
             )
 
-            // Ошибка (если есть)
+            // Общая ошибка (если не связана с полем)
             if (state.errorMessage != null) {
                 Text(
                     text = state.errorMessage,
