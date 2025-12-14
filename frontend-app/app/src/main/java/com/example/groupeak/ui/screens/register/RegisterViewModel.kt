@@ -17,6 +17,10 @@ data class RegisterUiState(
     val passwordsDoNotMatch: Boolean = false,
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    // Добавляем только эти поля
+    val fioError: String? = null,
+    val emailError: String? = null,
+    val passwordError: String? = null
 )
 
 class RegisterViewModel(
@@ -27,15 +31,15 @@ class RegisterViewModel(
         private set
 
     fun onFioChange(value: String) {
-        uiState = uiState.copy(fio = value, errorMessage = null)
+        uiState = uiState.copy(fio = value, errorMessage = null, fioError = null)
     }
 
     fun onEmailChange(value: String) {
-        uiState = uiState.copy(email = value, errorMessage = null)
+        uiState = uiState.copy(email = value, errorMessage = null, emailError = null)
     }
 
     fun onPasswordChange(value: String) {
-        uiState = uiState.copy(password = value, errorMessage = null, passwordsDoNotMatch = false)
+        uiState = uiState.copy(password = value, errorMessage = null, passwordsDoNotMatch = false, passwordError = null)
     }
 
     fun onSecondPasswordChange(value: String) {
@@ -73,9 +77,50 @@ class RegisterViewModel(
                 Log.d("Auth", "Register success, token = ${auth.token}")
                 onSuccess()
             }.onFailure { e ->
-                Log.e("Auth", "Register error", e)
-                // TODO: сделать обработку ошибок с бэка
-                uiState = uiState.copy(errorMessage = "Ошибка регистрации. Попробуйте ещё раз.")
+                // Очищаем старые ошибки
+                var newState = current.copy(
+                    fioError = null,
+                    emailError = null,
+                    passwordError = null,
+                    errorMessage = null
+                )
+
+                when {
+                    e.message?.contains("email already taken", true) == true -> {
+                        newState = newState.copy(emailError = "Этот email уже используется")
+                    }
+
+                    e.message?.contains("invalid email format", true) == true -> {
+                        newState = newState.copy(emailError = "Неверный формат email")
+                    }
+
+                    e.message?.contains("email domain is not supported", true) == true -> {
+                        newState = newState.copy(emailError = "Домен email не поддерживается")
+                    }
+
+                    e.message?.contains("password must be at least", true) == true -> {
+                        newState = newState.copy(passwordError = "Пароль должен быть не менее 8 символов")
+                    }
+
+                    e.message?.contains("full_name", true) == true -> {
+                        // Проверяем что пустое
+                        if (current.fio.isEmpty()) {
+                            newState = newState.copy(fioError = "Введите ФИО")
+                        }
+                        if (current.email.isEmpty()) {
+                            newState = newState.copy(emailError = "Введите email")
+                        }
+                        if (current.password.isEmpty()) {
+                            newState = newState.copy(passwordError = "Введите пароль")
+                        }
+                    }
+
+                    else -> {
+                        newState = newState.copy(errorMessage = e.message ?: "Неизвестная ошибка")
+                    }
+                }
+
+                uiState = newState
             }
         }
     }
