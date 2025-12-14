@@ -6,12 +6,7 @@ import com.example.groupeak.data.remote.dto.LoginRequest
 import com.example.groupeak.data.remote.dto.RegisterRequest
 import com.example.groupeak.domain.repository.AuthRepository
 
-object Positions {
-    const val BACKEND = "backend"
-    const val FRONTEND = "frontend"
-    const val UIUX = "uiux"
-    const val PM = "pm"
-}
+import com.example.groupeak.data.remote.errors.parseApiError
 
 class AuthRepositoryImpl(
     private val api: AuthApi,
@@ -23,27 +18,40 @@ class AuthRepositoryImpl(
         password: String,
         position: String,
         avatarUrl: String?,
-    ): Result<AuthResponse> = runCatching {
-        api.register(
-            RegisterRequest(
-                fullName = fullName,
-                email = email,
-                password = password,
-                position = position,
-                avatarUrl = avatarUrl,
+    ): Result<AuthResponse> {
+        return try {
+            Result.success(
+                api.register(
+                    RegisterRequest(
+                        fullName = fullName,
+                        email = email,
+                        password = password,
+                        position = position,
+                        avatarUrl = avatarUrl,
+                    )
+                )
             )
-        )
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e))
+        }
     }
 
     override suspend fun login(
         email: String,
         password: String,
-    ): Result<AuthResponse> = runCatching {
-        api.login(
-            LoginRequest(
-                email = email,
-                password = password,
+    ): Result<AuthResponse> {
+        return try {
+            Result.success(
+                api.login(
+                    LoginRequest(
+                        email = email,
+                        password = password,
+                    )
+                )
             )
-        )
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e))
+        }
     }
 }
+
