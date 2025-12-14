@@ -79,7 +79,9 @@ fun RegisterScreen(
                 onValueChange = onFioChange,
                 label = "ФИО",
                 placeholder = "ФИО",
-                iconResId = R.drawable.ic_fio
+                iconResId = R.drawable.ic_fio,
+                isError = state.fioError != null,
+                errorMessage = state.fioError
             )
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -90,7 +92,9 @@ fun RegisterScreen(
                 onValueChange = onEmailChange,
                 label = "Email",
                 placeholder = "Email",
-                iconResId = R.drawable.ic_email
+                iconResId = R.drawable.ic_email,
+                isError = state.emailError != null,
+                errorMessage = state.emailError
             )
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -101,7 +105,9 @@ fun RegisterScreen(
                 onValueChange = onPasswordChange,
                 label = "Пароль",
                 placeholder = "Пароль",
-                lockIconResId = R.drawable.ic_lock
+                lockIconResId = R.drawable.ic_lock,
+                isError = state.passwordError != null || state.passwordsDoNotMatch,
+                errorMessage = state.passwordError
             )
 
             Spacer(modifier = Modifier.height(18.dp))
@@ -113,21 +119,23 @@ fun RegisterScreen(
                 onValueChange = onSecondPasswordChange,
                 placeholder = "Подтверждение пароля",
                 lockIconResId = R.drawable.ic_lock,
-                isError = state.passwordsDoNotMatch
+                isError = state.passwordsDoNotMatch,
+                errorMessage = if (state.passwordsDoNotMatch) "Пароли не совпадают" else null
             )
 
-            if (state.passwordsDoNotMatch) {
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Пароли не совпадают",
-                    color = Color(0xFFFF4D4F),
-                    fontSize = 14.sp,
-                    fontFamily = OnestFontFamily,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(start = 32.dp)
-                )
-            }
+//            if (state.passwordsDoNotMatch) {
+//                Spacer(modifier = Modifier.height(8.dp))
+//                Text(
+//                    text = "Пароли не совпадают",
+//                    color = Color(0xFFFF4D4F),
+//                    fontSize = 12.sp,
+//                    fontFamily = OnestFontFamily,
+//
+//                    modifier = Modifier
+//                        .fillMaxWidth()
+//                        .padding(start = 16.dp, top = 4.dp)
+//                )
+//            }
 
             Spacer(modifier = Modifier.height(30.dp))
 
@@ -144,7 +152,7 @@ fun RegisterScreen(
 
             Spacer(modifier = Modifier.height(18.dp))
 
-            // Ошибка с бэка (общая)
+            // Общая ошибка (если не связана с полем)
             if (state.errorMessage != null) {
                 Text(
                     text = state.errorMessage,
