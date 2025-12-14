@@ -14,6 +14,8 @@ data class LoginUiState(
     val password: String = "",
     val isLoading: Boolean = false,
     val errorMessage: String? = null,
+    val emailError: String? = null,
+    val passwordError: String? = null
 )
 
 class LoginViewModel(
@@ -24,23 +26,52 @@ class LoginViewModel(
         private set
 
     fun onEmailChange(value: String) {
-        uiState = uiState.copy(email = value, errorMessage = null)
+        uiState = uiState.copy(
+            email = value,
+            errorMessage = null,
+            emailError = null
+        )
     }
 
     fun onPasswordChange(value: String) {
-        uiState = uiState.copy(password = value, errorMessage = null)
+        uiState = uiState.copy(
+            password = value,
+            errorMessage = null,
+            passwordError = null
+        )
     }
 
     fun onLoginClick(onSuccess: () -> Unit) {
         val current = uiState
 
-        if (current.email.isBlank() || current.password.isBlank()) {
-            uiState = current.copy(errorMessage = "Введите email и пароль")
+        // Очищаем старые ошибки
+        var newState = current.copy(
+            emailError = null,
+            passwordError = null,
+            errorMessage = null
+        )
+
+        // Локальная проверка
+        if (current.email.isBlank()) {
+            newState = newState.copy(emailError = "Введите email")
+        }
+        if (current.password.isBlank()) {
+            newState = newState.copy(passwordError = "Введите пароль")
+        }
+
+        // Если есть ошибки валидации - показываем и выходим
+        if (newState.emailError != null || newState.passwordError != null) {
+            uiState = newState
             return
         }
 
         viewModelScope.launch {
-            uiState = uiState.copy(isLoading = true, errorMessage = null)
+            uiState = uiState.copy(
+                isLoading = true,
+                errorMessage = null,
+                emailError = null,
+                passwordError = null
+            )
 
             val result = authRepository.login(
                 email = current.email,
@@ -54,7 +85,33 @@ class LoginViewModel(
                 onSuccess()
             }.onFailure { e ->
                 Log.e("Auth", "Login error", e)
-                uiState = uiState.copy(errorMessage = "Не удалось войти. Проверьте данные.")
+
+                // Очищаем старые ошибки
+                var errorState = uiState.copy(
+                    emailError = null,
+                    passwordError = null,
+                    errorMessage = null
+                )
+
+                when {
+                    e.message?.contains("invalid credentials", true) == true -> {
+                        errorState = errorState.copy(errorMessage = "Неверный email или пароль")
+                    }
+
+                    e.message?.contains("invalid email format", true) == true -> {
+                        errorState = errorState.copy(emailError = "Неверный формат email")
+                    }
+
+                    e.message?.contains("email domain is not supported", true) == true -> {
+                        errorState = errorState.copy(emailError = "Домен email не поддерживается")
+                    }
+
+                    else -> {
+                        errorState = errorState.copy(errorMessage = e.message ?: "Неизвестная ошибка")
+                    }
+                }
+
+                uiState = errorState
             }
         }
     }
