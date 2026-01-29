@@ -13,6 +13,12 @@ import com.example.groupeak.ui.screens.login.LoginViewModel
 import com.example.groupeak.ui.screens.register.RegisterScreen
 import com.example.groupeak.ui.screens.register.RegisterViewModel
 import com.example.groupeak.ui.screens.start.StartScreen
+import com.example.groupeak.ui.screens.account.AccountViewModel
+import com.example.groupeak.ui.screens.account.AccountScreen
+import com.example.groupeak.ui.screens.profile.ProfileScreen
+import com.example.groupeak.ui.screens.feedback.FeedbackScreen
+import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
+import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
 
 // Фабрика для RegisterViewModel
 class RegisterViewModelFactory : ViewModelProvider.Factory {
@@ -62,11 +68,15 @@ fun AppNavGraph(navController: NavHostController) {
                 onForgotPassword = {},
                 onEmailChange = loginViewModel::onEmailChange,
                 onPasswordChange = loginViewModel::onPasswordChange,
+//                onLoginClick = {
+//                    loginViewModel.onLoginClick {
+//                        navController.navigate(Screen.Account.route) {
+//                            popUpTo(Screen.Login.route) { inclusive = true }
+//                        }
+//                    }
                 onLoginClick = {
-                    loginViewModel.onLoginClick {
-                        navController.navigate(Screen.Start.route) {
-                            popUpTo(Screen.Login.route) { inclusive = true }
-                        }
+                    navController.navigate(Screen.Account.route) {
+                        popUpTo(Screen.Start.route) { inclusive = true }
                     }
                 }
             )
@@ -97,6 +107,39 @@ fun AppNavGraph(navController: NavHostController) {
                     }
                 }
             )
+        }
+        composable(Screen.Account.route) {
+            val viewModel: AccountViewModel = viewModel()
+            val uiState = viewModel.uiState
+
+            AccountScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onProfileClick = { navController.navigate(Screen.Profile.route) },
+                onContactClick = { navController.navigate(Screen.Feedback.route) },
+                onChangeEmailClick = { navController.navigate(Screen.ChangeEmail.route) },
+                onChangePasswordClick = { navController.navigate(Screen.ChangePassword.route) },
+                onLogoutClick = {
+                    navController.navigate(Screen.Start.route) {
+                        popUpTo(0) { inclusive = true }
+                    }
+                }
+            )
+        }
+        composable(Screen.Profile.route) {
+            ProfileScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.Feedback.route) {
+            FeedbackScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.ChangeEmail.route) {
+            ChangeEmailScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.ChangePassword.route) {
+            ChangePasswordScreen(onBack = { navController.popBackStack() })
         }
     }
 }
