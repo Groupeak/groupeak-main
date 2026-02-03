@@ -29,7 +29,6 @@ import androidx.compose.material3.HorizontalDivider
 @Composable
 fun AccountScreen(
     uiState: AccountUiState,
-    onBackClick: () -> Unit,
     onProfileClick: () -> Unit,
     onContactClick: () -> Unit,
     onChangeEmailClick: () -> Unit,
@@ -48,17 +47,6 @@ fun AccountScreen(
                     .fillMaxWidth()
                     .padding(top = 55.dp, bottom = 58.dp)
             ) {
-                // Кнопка "Назад"
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_back_arrow),
-                    contentDescription = "Назад",
-                    tint = BluePrimary300,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .offset(x = 8.dp)
-                        .size(28.dp)
-                        .clickable { onBackClick() }
-                )
 
                 // Заголовок
                 Text(
@@ -73,17 +61,21 @@ fun AccountScreen(
                         .fillMaxWidth()
                 )
 
-                // Иконка уведомлений
-                Icon(
-                    painter = painterResource(id = R.drawable.ic_notif),
-                    contentDescription = "Уведомления",
-                    tint = BluePrimary300,
+                Box(
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .offset(x = (-19).dp)
-                        .size(28.dp)
-                        .clickable { /* ... */ }
-                )
+                        .padding(end = 19.dp)
+                        .size(28.dp) // область нажатия
+                        .clickable { /* ... */ },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        painter = painterResource(id = R.drawable.ic_notif),
+                        contentDescription = "Уведомления",
+                        tint = BluePrimary300,
+                        modifier = Modifier.size(22.dp) // размер иконки
+                    )
+                }
             }
 
             // Информация о пользователе
@@ -235,30 +227,6 @@ fun AccountScreen(
                     modifier = Modifier.padding(top = 16.dp, bottom = 23.dp)
                 )
             }
-
-            // Нижнее меню (заглушка)
-            Spacer(modifier = Modifier.weight(1f))
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(65.dp)
-                    .background(
-                        Color.White,
-                        shape = RoundedCornerShape(
-                            topStart = 18.dp,
-                            topEnd = 18.dp,
-                            bottomStart = 0.dp,
-                            bottomEnd = 0.dp
-                        )
-                    ),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                //BottomNavItem(label = "Главная", icon = R.drawable.ic_home)
-                //BottomNavItem(label = "Задачи", icon = R.drawable.ic_tasks)
-                //BottomNavItem(label = "Аккаунт", icon = R.drawable.ic_user)
-            }
         }
     }
 }
@@ -285,14 +253,17 @@ private fun StatCard(
             text = count,
             fontSize = 14.sp,
             fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Bold,
+            fontWeight = FontWeight.Normal,
             color = countColor,
+            modifier = Modifier.offset(y = 3.dp)
         )
         Text(
             text = label,
             fontSize = 12.sp,
             fontFamily = OnestFontFamily,
-            color = GroupeakDarkBlue
+            fontWeight = FontWeight.Normal,
+            color = GroupeakDarkBlue,
+            modifier = Modifier.offset(y = -3.dp)
         )
     }
 }
