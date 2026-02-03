@@ -21,6 +21,9 @@ android {
     }
 
     buildTypes {
+        debug {
+            buildConfigField("Boolean", "DEV_BYPASS_AUTH", "true")
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -38,6 +41,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.groupeak.domain.repository.AuthRepository
 import kotlinx.coroutines.launch
+import com.example.groupeak.BuildConfig
 
 data class LoginUiState(
     val email: String = "",
@@ -42,6 +43,17 @@ class LoginViewModel(
     }
 
     fun onLoginClick(onSuccess: () -> Unit) {
+        if (BuildConfig.DEV_BYPASS_AUTH) {
+            uiState = uiState.copy(
+                isLoading = false,
+                errorMessage = null,
+                emailError = null,
+                passwordError = null
+            )
+            onSuccess()
+            return
+        }
+
         val current = uiState
 
         // Очищаем старые ошибки
