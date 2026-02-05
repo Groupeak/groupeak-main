@@ -1,6 +1,7 @@
 package com.example.groupeak.ui.screens.profile
 
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
@@ -17,15 +18,19 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
@@ -41,6 +46,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.example.groupeak.R
@@ -50,7 +56,13 @@ import com.example.groupeak.ui.theme.GroupeakDarkBlue
 import com.example.groupeak.ui.theme.GroupeakLightGray
 import com.example.groupeak.ui.theme.Gray650
 import com.example.groupeak.ui.theme.OnestFontFamily
-
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.window.PopupPositionProvider
 // Размер области нажатия по уведомлениям (справа сверху в шапке)
 private val NotifHitBoxSize = 28.dp
 
@@ -63,6 +75,23 @@ private val FieldTextStyle = TextStyle(
     fontFamily = OnestFontFamily,
     fontWeight = FontWeight.Normal
 )
+
+// Размеры карточки профиля
+private val WhiteCardWidth = 348.dp
+private val WhiteCardHeight = 633.dp
+
+// Доп. высота карточки при показе текста "Изменения сохранены" (как в FeedbackScreen)
+private val SavedExtraHeight = 40.dp
+
+private val MessageTextStyleBase = TextStyle(
+    fontSize = 14.sp,
+    lineHeight = 14.sp,
+    fontFamily = OnestFontFamily,
+    fontWeight = FontWeight.Normal
+)
+
+private val SavedMessageColor = Color(0xFF26BC30)
+private val CancelledMessageColor = Color(0xFFFF0000)
 
 /**
  * Визуальная маска для даты.
@@ -119,6 +148,7 @@ fun ProfileScreen(
     onBackClick: () -> Unit,
     onEditClick: () -> Unit,
     onSaveClick: () -> Unit,
+    onCancelEdit: () -> Unit,
     onNotificationsClick: () -> Unit,
     onFullNameChange: (String) -> Unit,
     onBirthDateChange: (String) -> Unit,
@@ -144,8 +174,68 @@ fun ProfileScreen(
 
     val positionMenuMaxHeight = 48.dp * 3
 
+    var showCancelDialog by remember { mutableStateOf(false) }
+
+    // Анимация текста снизу (как в FeedbackScreen)
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var showMessageText by rememberSaveable { mutableStateOf(false) }
+    var messageKind by rememberSaveable { mutableStateOf(0) } // 0 = saved, 1 = canceled
+    var messagePulse by rememberSaveable { mutableStateOf(0) }
+
+    val messageText = if (messageKind == 1) "Изменения отменены" else "Изменения сохранены"
+    val messageColor = if (messageKind == 1) CancelledMessageColor else SavedMessageColor
+
+    val animatedCardHeight by animateDpAsState(
+        targetValue = if (isExpanded) WhiteCardHeight + SavedExtraHeight else WhiteCardHeight,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "cardHeight"
+    )
+
+    val savedAlpha by animateFloatAsState(
+        targetValue = if (showMessageText) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "savedAlpha"
+    )
+    val savedSlide by animateDpAsState(
+        targetValue = if (showMessageText) 0.dp else 10.dp,
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        label = "savedSlide"
+    )
+
+    val baseOutsideOffset by animateDpAsState(
+        targetValue = if (isExpanded) 0.dp else SavedExtraHeight,
+        animationSpec = tween(durationMillis = 420, easing = FastOutSlowInEasing),
+        label = "baseOutsideOffset"
+    )
+
+    LaunchedEffect(messagePulse) {
+        if (messagePulse == 0) return@LaunchedEffect
+
+        isExpanded = true
+        delay(140)
+        showMessageText = true
+
+        delay(2100)
+
+        showMessageText = false
+        isExpanded = false
+    }
+
     GroupeakBackground {
         Box(modifier = Modifier.fillMaxSize()) {
+
+            if (showCancelDialog) {
+                CancelChangesDialog(
+                    onDismiss = { showCancelDialog = false },
+                    onConfirm = {
+                        showCancelDialog = false
+                        positionMenuExpanded = false
+                        messageKind = 1
+                        messagePulse += 1
+                        onCancelEdit()
+                    }
+                )
+            }
 
             Column(
                 modifier = Modifier.fillMaxSize(),
@@ -164,191 +254,253 @@ fun ProfileScreen(
                     modifier = Modifier.padding(top = 16.dp),
                     contentAlignment = Alignment.TopCenter
                 ) {
-                    Column(
+                    Box(
                         modifier = Modifier
-                            .requiredWidth(348.dp)
-                            .requiredHeight(633.dp)
-                            .background(Color.White, RoundedCornerShape(18.dp))
-                            .padding(bottom = 11.dp)
+                            .requiredWidth(WhiteCardWidth)
+                            .requiredHeight(animatedCardHeight)
+                            .clip(RoundedCornerShape(18.dp))
+                            .background(Color.White)
                     ) {
-                        Text(
-                            text = if (uiState.isEditing) "Сохранить" else "Изменить",
-                            fontSize = 14.sp,
-                            fontFamily = OnestFontFamily,
-                            fontWeight = FontWeight.Normal,
-                            color = BluePrimary300,
+                        // Основное содержимое (фикс высота), чтобы анимация текста снизу не ломала верстку
+                        Box(
                             modifier = Modifier
-                                .align(Alignment.End)
-                                .padding(end = 20.dp, top = 11.dp)
-                                .clickable { if (uiState.isEditing) onSaveClick() else onEditClick() }
-                        )
-
-                        Spacer(Modifier.height(27.dp))
-
-                        if (!uiState.isEditing) {
-                            LabeledField(
-                                label = "Фамилия Имя Отчество",
-                                iconRes = R.drawable.ic_fio,
-                                value = uiState.fullName,
-                                modifier = Modifier
-                                    .requiredWidth(328.dp)
-                                    .align(Alignment.CenterHorizontally),
-                                fieldModifier = Modifier.fillMaxWidth(),
-                                fieldHeight = 55.dp,
-                                gapBetween = 6.dp,
-                                labelStartPadding = 16.dp,
-                                placeholder = "Не указано",
-                                placeholderColor = Gray650
-                            )
-                        } else {
-                            LabeledInputField(
-                                label = "Фамилия Имя Отчество",
-                                iconRes = R.drawable.ic_fio,
-                                value = uiState.fullName,
-                                onValueChange = onFullNameChange,
-                                modifier = Modifier
-                                    .requiredWidth(328.dp)
-                                    .align(Alignment.CenterHorizontally),
-                                fieldModifier = Modifier.fillMaxWidth(),
-                                fieldHeight = 55.dp,
-                                gapBetween = 6.dp,
-                                labelStartPadding = 16.dp,
-                                placeholder = "Не указано"
-                            )
-                        }
-
-                        Spacer(Modifier.height(6.dp))
-
-                        Row(
-                            modifier = Modifier
-                                .requiredWidth(326.dp)
-                                .align(Alignment.CenterHorizontally),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                .align(Alignment.TopCenter)
+                                .fillMaxWidth()
+                                .requiredHeight(WhiteCardHeight)
                         ) {
-                            BirthDateField(
-                                iconRes = R.drawable.ic_calendar,
-                                valueDigits = uiState.birthDate,
-                                onValueChange = onBirthDateChange,
-                                enabled = uiState.isEditing,
-                                modifier = Modifier.requiredWidth(155.dp),
-                                fieldModifier = Modifier.fillMaxWidth(),
-                                fieldHeight = 55.dp,
-                                gapBetween = 5.dp,
-                                labelStartPadding = 16.dp,
-                                placeholder = "ДД.ММ.ГГГГ"
-                            )
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .padding(bottom = 11.dp)
+                            ) {
+                                if (uiState.isEditing) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(start = 20.dp, end = 20.dp, top = 11.dp),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "Отмена",
+                                            fontSize = 14.sp,
+                                            fontFamily = OnestFontFamily,
+                                            fontWeight = FontWeight.Normal,
+                                            color = Gray650,
+                                            modifier = Modifier.clickable { showCancelDialog = true }
+                                        )
 
-                            if (!uiState.isEditing) {
-                                LabeledField(
-                                    label = "Должность",
-                                    iconRes = R.drawable.ic_briefcase,
-                                    value = uiState.position,
-                                    modifier = Modifier.requiredWidth(155.dp),
-                                    fieldModifier = Modifier.fillMaxWidth(),
-                                    fieldHeight = 55.dp,
-                                    placeholder = "Не указана",
-                                    placeholderColor = Gray650,
-                                    gapBetween = 5.dp,
-                                    labelStartPadding = 16.dp
-                                )
-                            } else {
-                                Box(modifier = Modifier.requiredWidth(155.dp)) {
+                                        Text(
+                                            text = "Сохранить",
+                                            fontSize = 14.sp,
+                                            fontFamily = OnestFontFamily,
+                                            fontWeight = FontWeight.Normal,
+                                            color = BluePrimary300,
+                                            modifier = Modifier.clickable {
+                                                positionMenuExpanded = false
+                                                onSaveClick()
+                                                messageKind = 0
+                                                messagePulse += 1
+                                            }
+                                        )
+                                    }
+                                } else {
+                                    Text(
+                                        text = "Изменить",
+                                        fontSize = 14.sp,
+                                        fontFamily = OnestFontFamily,
+                                        fontWeight = FontWeight.Normal,
+                                        color = BluePrimary300,
+                                        modifier = Modifier
+                                            .align(Alignment.End)
+                                            .padding(end = 20.dp, top = 11.dp)
+                                            .clickable {
+                                                positionMenuExpanded = false
+                                                showMessageText = false
+                                                isExpanded = false
+                                                onEditClick()
+                                            }
+                                    )
+                                }
 
-                                    LabeledSelectField(
-                                        label = "Должность",
-                                        iconRes = R.drawable.ic_briefcase,
-                                        value = uiState.position,
-                                        expanded = positionMenuExpanded,
-                                        onClick = {
-                                            val newValue = !positionMenuExpanded
-                                            positionMenuExpanded = newValue
-                                            if (newValue) onPositionClick()
-                                        },
-                                        modifier = Modifier.fillMaxWidth(),
+                                Spacer(Modifier.height(27.dp))
+
+                                if (!uiState.isEditing) {
+                                    LabeledField(
+                                        label = "Фамилия Имя Отчество",
+                                        iconRes = R.drawable.ic_fio,
+                                        value = uiState.fullName,
+                                        modifier = Modifier
+                                            .requiredWidth(328.dp)
+                                            .align(Alignment.CenterHorizontally),
+                                        fieldModifier = Modifier.fillMaxWidth(),
+                                        fieldHeight = 55.dp,
+                                        gapBetween = 6.dp,
+                                        labelStartPadding = 16.dp,
+                                        placeholder = "Не указано",
+                                        placeholderColor = Gray650
+                                    )
+                                } else {
+                                    LabeledInputField(
+                                        label = "Фамилия Имя Отчество",
+                                        iconRes = R.drawable.ic_fio,
+                                        value = uiState.fullName,
+                                        onValueChange = onFullNameChange,
+                                        modifier = Modifier
+                                            .requiredWidth(328.dp)
+                                            .align(Alignment.CenterHorizontally),
+                                        fieldModifier = Modifier.fillMaxWidth(),
+                                        fieldHeight = 55.dp,
+                                        gapBetween = 6.dp,
+                                        labelStartPadding = 16.dp,
+                                        placeholder = "Не указано"
+                                    )
+                                }
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Row(
+                                    modifier = Modifier
+                                        .requiredWidth(326.dp)
+                                        .align(Alignment.CenterHorizontally),
+                                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                                ) {
+                                    BirthDateField(
+                                        iconRes = R.drawable.ic_calendar,
+                                        valueDigits = uiState.birthDate,
+                                        onValueChange = onBirthDateChange,
+                                        enabled = uiState.isEditing,
+                                        modifier = Modifier.requiredWidth(155.dp),
                                         fieldModifier = Modifier.fillMaxWidth(),
                                         fieldHeight = 55.dp,
                                         gapBetween = 5.dp,
                                         labelStartPadding = 16.dp,
-                                        placeholder = "Не указана",
-                                        contentEndPadding = 10.dp
+                                        placeholder = "ДД.ММ.ГГГГ"
                                     )
 
-                                    PositionDropdownPopup(
-                                        expanded = positionMenuExpanded,
-                                        onDismiss = { positionMenuExpanded = false },
-                                        width = 155.dp,
-                                        maxHeight = positionMenuMaxHeight,
-                                        yOffsetFromTop = 82.dp,
-                                        scrollState = positionMenuScroll,
-                                        options = positionOptions,
-                                        onSelect = { option ->
-                                            onPositionChange(option)
-                                            positionMenuExpanded = false
-                                        }
-                                    )
+                                    if (!uiState.isEditing) {
+                                        LabeledField(
+                                            label = "Должность",
+                                            iconRes = R.drawable.ic_briefcase,
+                                            value = uiState.position,
+                                            modifier = Modifier.requiredWidth(155.dp),
+                                            fieldModifier = Modifier.fillMaxWidth(),
+                                            fieldHeight = 55.dp,
+                                            placeholder = "Не указана",
+                                            placeholderColor = Gray650,
+                                            gapBetween = 5.dp,
+                                            labelStartPadding = 16.dp,
+                                            iconTextGap = 8.dp
+                                        )
+                                    } else {
+                                        LabeledPositionSelectOverlay(
+                                            label = "Должность",
+                                            iconRes = R.drawable.ic_briefcase,
+                                            value = uiState.position,
+                                            expanded = positionMenuExpanded,
+                                            onExpandedChange = { newValue ->
+                                                positionMenuExpanded = newValue
+                                                if (newValue) onPositionClick()
+                                            },
+                                            options = positionOptions,
+                                            onSelect = { option ->
+                                                onPositionChange(option)
+                                                positionMenuExpanded = false
+                                            },
+                                            modifier = Modifier.requiredWidth(155.dp),
+                                            fieldHeight = 55.dp,
+                                            expandedHeight = 145.5.dp,
+                                            gapBetween = 5.dp,
+                                            labelStartPadding = 16.dp,
+                                            placeholder = "Не указана",
+                                            placeholderColor = Gray650,
+                                            iconTextGap = 8.dp
+                                        )
+                                    }
+                                }
+
+                                Spacer(Modifier.height(6.dp))
+
+                                Text(
+                                    text = "О себе",
+                                    fontSize = 14.sp,
+                                    fontFamily = OnestFontFamily,
+                                    fontWeight = FontWeight.Normal,
+                                    color = BluePrimary300,
+                                    modifier = Modifier.padding(start = 28.dp)
+                                )
+
+                                Spacer(Modifier.height(5.14.dp))
+
+                                val aboutScrollState = rememberScrollState()
+
+                                Box(
+                                    modifier = Modifier
+                                        .requiredWidth(327.dp)
+                                        .requiredHeight(352.35.dp)
+                                        .align(Alignment.CenterHorizontally)
+                                        .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                                        .background(Color.White, RoundedCornerShape(18.dp))
+                                        .padding(14.dp)
+                                ) {
+                                    if (!uiState.isEditing) {
+                                        val aboutEmpty = uiState.about.isBlank()
+                                        Text(
+                                            text = if (aboutEmpty) "Расскажите немного о себе" else uiState.about,
+                                            style = FieldTextStyle,
+                                            color = if (aboutEmpty) Gray650 else GroupeakDarkBlue,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(aboutScrollState)
+                                                .padding(start = 4.dp)
+                                        )
+                                    } else {
+                                        BasicTextField(
+                                            value = uiState.about,
+                                            onValueChange = onAboutChange,
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .verticalScroll(aboutScrollState)
+                                                .padding(start = 4.dp),
+                                            textStyle = FieldTextStyle.copy(color = GroupeakDarkBlue),
+                                            decorationBox = { inner ->
+                                                if (uiState.about.isBlank()) {
+                                                    Text(
+                                                        text = "Расскажите немного о себе",
+                                                        style = FieldTextStyle,
+                                                        color = Gray650
+                                                    )
+                                                }
+                                                inner()
+                                            }
+                                        )
+                                    }
                                 }
                             }
                         }
 
-                        Spacer(Modifier.height(6.dp))
-
-                        Text(
-                            text = "О себе",
-                            fontSize = 14.sp,
-                            fontFamily = OnestFontFamily,
-                            fontWeight = FontWeight.Normal,
-                            color = BluePrimary300,
-                            modifier = Modifier.padding(start = 28.dp)
-                        )
-
-                        Spacer(Modifier.height(5.14.dp))
-
-                        val aboutScrollState = rememberScrollState()
-
+                        // Текст статуса (снизу) (снизу, с fade+slide, как в FeedbackScreen)
                         Box(
                             modifier = Modifier
-                                .requiredWidth(327.dp)
-                                .requiredHeight(352.35.dp)
-                                .align(Alignment.CenterHorizontally)
-                                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
-                                .background(Color.White, RoundedCornerShape(18.dp))
-                                .padding(14.dp)
+                                .align(Alignment.BottomCenter)
+                                .padding(bottom = 17.dp)
+                                .offset(y = baseOutsideOffset + savedSlide)
+                                .graphicsLayer { alpha = savedAlpha },
+                            contentAlignment = Alignment.Center
                         ) {
-                            if (!uiState.isEditing) {
-                                val aboutEmpty = uiState.about.isBlank()
-                                Text(
-                                    text = if (aboutEmpty) "Расскажите немного о себе" else uiState.about,
-                                    style = FieldTextStyle,
-                                    color = if (aboutEmpty) Gray650 else GroupeakDarkBlue,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(aboutScrollState)
-                                        .padding(start = 4.dp)
-                                )
-                            } else {
-                                BasicTextField(
-                                    value = uiState.about,
-                                    onValueChange = onAboutChange,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .verticalScroll(aboutScrollState)
-                                        .padding(start = 4.dp),
-                                    textStyle = FieldTextStyle.copy(color = GroupeakDarkBlue),
-                                    decorationBox = { inner ->
-                                        if (uiState.about.isBlank()) {
-                                            Text(
-                                                text = "Расскажите немного о себе",
-                                                style = FieldTextStyle,
-                                                color = Gray650
-                                            )
-                                        }
-                                        inner()
-                                    }
-                                )
-                            }
+                            Text(
+                                text = messageText,
+                                style = MessageTextStyleBase.copy(color = messageColor),
+                                maxLines = 1,
+                                softWrap = false,
+                                modifier = Modifier
+                                    .wrapContentHeight(unbounded = true)
+                                    .offset(y = (-0.5).dp)
+                            )
                         }
                     }
 
+                    // Аватар (поверх карточки)
                     Box(
                         modifier = Modifier
                             .align(Alignment.TopCenter)
@@ -371,58 +523,376 @@ fun ProfileScreen(
     }
 }
 
-
 @Composable
-private fun PositionDropdownPopup(
-    expanded: Boolean,
+private fun CancelChangesDialog(
     onDismiss: () -> Unit,
-    width: Dp,
-    maxHeight: Dp,
-    yOffsetFromTop: Dp,
-    scrollState: androidx.compose.foundation.ScrollState,
-    options: List<String>,
-    onSelect: (String) -> Unit
+    onConfirm: () -> Unit
 ) {
-    if (!expanded) return
-
-    val density = LocalDensity.current
-    val yOffsetPx = with(density) { yOffsetFromTop.roundToPx() }
-
-    Popup(
-        alignment = Alignment.TopStart,
-        offset = IntOffset(0, yOffsetPx),
-        onDismissRequest = onDismiss,
-        properties = PopupProperties(focusable = true)
-    ) {
-        Column(
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
             modifier = Modifier
-                .width(width)
-                .heightIn(max = maxHeight)
+                .size(width = 215.dp, height = 111.dp)
                 .background(Color.White, RoundedCornerShape(18.dp))
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
-                .verticalScroll(scrollState)
         ) {
-            options.forEach { option ->
+            // Заголовок: отступ сверху 21dp, по центру X
+            // Фиксируем высоту 18dp, чтобы отступ до кнопок был строго 27dp.
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 21.dp)
+                    .height(18.dp),
+                contentAlignment = Alignment.TopCenter
+            ) {
+                Text(
+                    text = "Отменить изменения?",
+                    fontSize = 14.sp,
+                    lineHeight = 14.sp,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF000000),
+                    textAlign = TextAlign.Center,
+                    maxLines = 1
+                )
+            }
+
+            // Кнопки: 88x32, скругление 18
+            // Отступы: слева 13, между 13, справа 13; снизу 13.
+            Row(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .padding(start = 13.dp, end = 13.dp, bottom = 13.dp),
+                horizontalArrangement = Arrangement.spacedBy(13.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Да (заливка)
                 Box(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp)
-                        .clickable { onSelect(option) }
-                        .padding(horizontal = 16.dp),
-                    contentAlignment = Alignment.CenterStart
+                        .size(width = 88.dp, height = 32.dp)
+                        .background(BluePrimary300, RoundedCornerShape(18.dp))
+                        .clickable { onConfirm() },
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
-                        text = option,
-                        style = FieldTextStyle,
-                        color = GroupeakDarkBlue,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        text = "Да",
+                        fontSize = 14.sp,
+                        fontFamily = OnestFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        color = Color.White
+                    )
+                }
+
+                // Нет (контур)
+                Box(
+                    modifier = Modifier
+                        .size(width = 88.dp, height = 32.dp)
+                        .border(1.dp, BluePrimary300, RoundedCornerShape(18.dp))
+                        .clickable { onDismiss() },
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "Нет",
+                        fontSize = 14.sp,
+                        fontFamily = OnestFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        color = BluePrimary300
                     )
                 }
             }
         }
     }
 }
+
+
+
+
+
+@Composable
+private fun LabeledPositionSelectOverlay(
+    label: String,
+    iconRes: Int,
+    value: String,
+    expanded: Boolean,
+    onExpandedChange: (Boolean) -> Unit,
+    options: List<String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    fieldHeight: Dp = 55.dp,
+    expandedHeight: Dp = 145.5.dp,
+    labelSlotHeight: Dp = 22.dp,
+    gapBetween: Dp = 5.dp,
+    labelStartPadding: Dp = 16.dp,
+    iconStartPadding: Dp = 11.dp,
+    contentEndPadding: Dp = 10.dp,
+    iconSize: Dp = 22.dp,
+    iconTextGap: Dp = 12.dp,
+    placeholder: String = "Не указана",
+    placeholderColor: Color = Gray650
+) {
+    val animDuration = 260
+
+    val scope = rememberCoroutineScope()
+    var isClosing by remember { mutableStateOf(false) }
+
+    val showPopup = expanded || isClosing
+
+    fun open() {
+        isClosing = false
+        onExpandedChange(true)
+    }
+
+    fun close() {
+        if (!expanded || isClosing) return
+        isClosing = true
+        onExpandedChange(false)
+        scope.launch {
+            delay(animDuration.toLong())
+            isClosing = false
+        }
+    }
+    val containerHeight by animateDpAsState(
+        targetValue = if (expanded) expandedHeight else fieldHeight,
+        animationSpec = tween(durationMillis = animDuration, easing = FastOutSlowInEasing),
+        label = "positionOverlayHeight"
+    )
+
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (expanded) 180f else 0f,
+        animationSpec = tween(durationMillis = animDuration, easing = FastOutSlowInEasing),
+        label = "positionOverlayArrowRotation"
+    )
+
+    val dropdownHeight = (containerHeight - fieldHeight).coerceAtLeast(0.dp)
+    val listScroll = rememberScrollState()
+
+    Column(modifier = modifier) {
+        // label
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(labelSlotHeight)
+        ) {
+            Text(
+                text = label,
+                fontSize = 14.sp,
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Normal,
+                color = BluePrimary300,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(start = labelStartPadding)
+            )
+        }
+
+        Spacer(Modifier.height(gapBetween))
+
+        // Якорь: в верстке всегда только 55dp (ничего не двигается)
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(fieldHeight)
+        ) {
+            // Обычное поле (видимо, когда popup не показан)
+            PositionTopRow(
+                iconRes = iconRes,
+                value = value,
+                isExpanded = expanded,
+                rotation = arrowRotation,
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer { alpha = if (showPopup) 0f else 1f },
+                iconStartPadding = iconStartPadding,
+                contentEndPadding = contentEndPadding,
+                iconSize = iconSize,
+                iconTextGap = iconTextGap,
+                placeholder = placeholder,
+                placeholderColor = placeholderColor,
+                drawBorder = true,
+                onClick = { if (expanded) close() else open() }
+            )
+
+            if (showPopup) {
+                val positionProvider = remember {
+                    object : PopupPositionProvider {
+                        override fun calculatePosition(
+                            anchorBounds: IntRect,
+                            windowSize: IntSize,
+                            layoutDirection: LayoutDirection,
+                            popupContentSize: IntSize
+                        ): IntOffset {
+                            // фиксируемся строго в верхнем левом углу поля "Должность"
+                            return IntOffset(anchorBounds.left, anchorBounds.top)
+                        }
+                    }
+                }
+
+                Popup(
+                    popupPositionProvider = positionProvider,
+                    onDismissRequest = { close() },
+                    properties = PopupProperties(focusable = true, dismissOnClickOutside = true, dismissOnBackPress = true)
+                ) {
+                    // Важно: ширина совпадает с полем (в дизайне 155dp)
+                    Box(
+                        modifier = Modifier
+                            .requiredWidth(155.dp)
+                            .height(containerHeight)
+                            .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                            .background(Color.White, RoundedCornerShape(18.dp))
+                            .clip(RoundedCornerShape(18.dp))
+                    ) {
+                        Column(modifier = Modifier.fillMaxSize()) {
+                            // Верхняя часть поля
+                            PositionTopRow(
+                                iconRes = iconRes,
+                                value = value,
+                                isExpanded = true,
+                                rotation = arrowRotation,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(fieldHeight),
+                                iconStartPadding = iconStartPadding,
+                                contentEndPadding = contentEndPadding,
+                                iconSize = iconSize,
+                                iconTextGap = iconTextGap,
+                                placeholder = placeholder,
+                                placeholderColor = placeholderColor,
+                                drawBorder = false,
+                                onClick = { close() }
+                            )
+
+                            // Выпадающая часть: растёт вниз
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(dropdownHeight)
+                                    .clipToBounds()
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .verticalScroll(listScroll),
+                                    horizontalAlignment = Alignment.CenterHorizontally
+                                ) {
+                                    val listTextStartPadding = iconStartPadding + iconSize + iconTextGap
+                                    val listEndPadding = contentEndPadding + 24.dp
+                                    val dividerWidth = 107.dp
+                                    options.forEachIndexed { index, option ->                                        // Текст списка выравниваем по началу значения (как "Не указана")
+                                        val rowStartPadding = listTextStartPadding
+
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clickable {
+                                                    onSelect(option)
+                                                    close()
+                                                }
+                                                .padding(start = rowStartPadding, end = listEndPadding),
+                                            contentAlignment = Alignment.CenterStart
+                                        ) {
+                                            Text(
+                                                text = option,
+                                                style = FieldTextStyle,
+                                                color = GroupeakDarkBlue,
+                                                textAlign = TextAlign.Start,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                modifier = Modifier.fillMaxWidth()
+                                            )
+                                        }
+
+                                        if (index != options.lastIndex) {
+                                            Spacer(Modifier.height(7.dp)) // от надписи до линии
+
+                                            // Линия 107dp, отступ слева 23dp от белого блока
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(start = 23.dp),
+                                                contentAlignment = Alignment.CenterStart
+                                            ) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .width(dividerWidth)
+                                                        .height(1.dp)
+                                                        .background(Color(0xFF969696))
+                                                )
+                                            }
+
+                                            Spacer(Modifier.height(7.dp)) // между надписями 14
+                                        }
+                                    }
+
+                                    Spacer(Modifier.height(14.dp))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PositionTopRow(
+    iconRes: Int,
+    value: String,
+    isExpanded: Boolean,
+    rotation: Float,
+    modifier: Modifier = Modifier,
+    iconStartPadding: Dp,
+    contentEndPadding: Dp,
+    iconSize: Dp,
+    iconTextGap: Dp,
+    placeholder: String,
+    placeholderColor: Color,
+    drawBorder: Boolean,
+    onClick: () -> Unit
+) {
+    val rowModifier = if (drawBorder) {
+        modifier
+            .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+            .background(Color.White, RoundedCornerShape(18.dp))
+    } else {
+        modifier
+    }
+
+    Row(
+        modifier = rowModifier
+            .padding(start = iconStartPadding, end = contentEndPadding)
+            .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            painter = painterResource(id = iconRes),
+            contentDescription = null,
+            tint = BluePrimary300,
+            modifier = Modifier.size(iconSize)
+        )
+
+        Spacer(Modifier.width(iconTextGap))
+
+        val showPlaceholder = value.isBlank()
+        Text(
+            text = if (showPlaceholder) placeholder else value,
+            style = FieldTextStyle,
+            color = if (showPlaceholder) placeholderColor else GroupeakDarkBlue,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f)
+        )
+
+        Icon(
+            painter = painterResource(id = R.drawable.ic_down_arrow),
+            contentDescription = "Открыть список",
+            tint = BluePrimary300,
+            modifier = Modifier
+                .size(24.dp)
+                .rotate(rotation)
+        )
+    }
+}
+
 
 @Composable
 private fun ProfileHeader(
