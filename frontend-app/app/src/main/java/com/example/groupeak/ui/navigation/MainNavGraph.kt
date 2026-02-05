@@ -48,6 +48,7 @@ fun MainNavGraph(
                 onBackClick = { navController.popBackStack() },
                 onEditClick = vm::onEditClick,
                 onSaveClick = vm::onSaveClick,
+                onCancelEdit = vm::onCancelEdit,
                 onNotificationsClick = { /* TODO */ },
                 onPositionClick = { /* TODO */ },
                 onFullNameChange = vm::onFullNameChange,
