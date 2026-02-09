@@ -5,14 +5,12 @@ import (
 	"os"
 )
 
-
 type Config struct {
-	DBDsn string
-	JWTToken string
-	HTTPPort string	
+	DBDsn     string
+	JWTToken  string
+	HTTPPort  string
 	AppDomain string
 }
-
 
 func Load() Config {
 	httpPort := os.Getenv("APP_PORT")
@@ -38,9 +36,9 @@ func Load() Config {
 	appDomain := os.Getenv("APP_DOMAIN")
 
 	return Config{
-		HTTPPort: httpPort,
-		DBDsn:    dsn,
-		JWTToken: jwtToken,
+		HTTPPort:  httpPort,
+		DBDsn:     dsn,
+		JWTToken:  jwtToken,
 		AppDomain: appDomain,
 	}
 }
