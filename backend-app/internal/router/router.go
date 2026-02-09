@@ -4,6 +4,7 @@ import (
 	"net/http"
 
 	"groupeak/internal/handlers"
+	"groupeak/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -11,58 +12,57 @@ import (
 )
 
 // NewRouter собирает HTTP-маршруты
-func NewRouter(authHandler *handlers.AuthHandler) http.Handler {
-	router := chi.NewRouter()
+func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.ProjectHandler,
+	taskHandler *handlers.TaskHandler, jwtSecret []byte) http.Handler {
+	r := chi.NewRouter()
 
-	// Базовые middlewares.
-	router.Use(chimw.RequestID)
-	router.Use(chimw.Logger)
-	router.Use(chimw.Recoverer)
+	r.Use(chimw.RequestID)
+	r.Use(chimw.RealIP)
+	r.Use(chimw.Recoverer)
+	r.Use(chimw.Logger)
 
-	// CORS Настройки для работы с фронтом
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins: []string{
-			"http://localhost:5173", 
-			"http://localhost:3000", 
-			"https://api-groupeak.netlify.app/",
-		},
-
-		AllowedMethods: []string{
-			"GET",
-			"POST",
-			"PUT",
-			"PATCH",
-			"DELETE",
-			"OPTIONS",
-		},
-
-		AllowedHeaders: []string{
-			"Accept",
-			"Authorization",
-			"Content-Type",
-			"X-CSRF-Token",
-		},
-
-		ExposedHeaders: []string{
-			"Link",
-		},
-
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000", "http://127.0.0.1:3000"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
 		AllowCredentials: true,
-		MaxAge: 300,
+		MaxAge:           300,
 	}))
 
-	// Маршруты API
-	router.Route("/api/v1", func(router chi.Router) {
-		router.Route("/auth", func(router chi.Router) {
-			router.Post("/register", authHandler.Register)
-			router.Post("/login", authHandler.Login)
+	r.Route("/api/v1", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/register", authHandler.Register)
+			r.Post("/login", authHandler.Login)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(middleware.AuthMiddleware(jwtSecret))
+
+			r.Route("/projects", func(r chi.Router) {
+				r.Post("/", projectHandler.CreateProject)                   // POST /api/v1/projects
+				r.Get("/", projectHandler.ListProjects)                     // GET  /api/v1/projects
+				r.Post("/{projectID}/invites", projectHandler.InviteMember) // POST /api/v1/projects/{projectID}/invites
+				r.Get("/{projectID}/members", projectHandler.ListMembers)   // GET  /api/v1/projects/{projectID}/members
+				r.Post("/invites/accept", projectHandler.AcceptInvite)      // POST /api/v1/projects/invites/accept
+
+				r.Post("/{projectID}/tasks", taskHandler.CreateTask)          // POST /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks", taskHandler.ListTasks)            // GET  /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID) // GET  /api/v1/projects/{projectID}/tasks/{taskID}
+			})
+
+			r.Route("/user", func(r chi.Router) {
+				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
+				r.Post("/change-email", authHandler.ChangeEmail)       // POST /api/v1/user/change-email
+				r.Get("/profile", authHandler.GetProfile)              // GET /api/v1/user/get-profile
+			})
+
 		})
 	})
 
-	router.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
 
-	return router
+	return r
 }
