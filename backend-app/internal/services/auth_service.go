@@ -14,53 +14,60 @@ import (
 )
 
 var (
-	ErrEmailAlreadyTaken = errors.New("email already taken")
-	ErrInvalidPosition = errors.New("invalid position")
-	ErrMissingFields = errors.New("full_name, email and password are required")
-	ErrWeakPassword = errors.New("password must be at least 8 characters long")
-	ErrInvalidEmail = errors.New("invalid email format")
+	ErrEmailAlreadyTaken      = errors.New("email already taken")
+	ErrInvalidPosition        = errors.New("invalid position")
+	ErrMissingFields          = errors.New("full_name, email and password are required")
+	ErrWeakPassword           = errors.New("password must be at least 8 characters long")
+	ErrInvalidEmail           = errors.New("invalid email format")
 	ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
-	ErrInvalidCredentials = errors.New("invalid credentials")
-	ErrInvalidBirthDate = errors.New("invalid birth date, expected format dd.mm.yyyy")
+	ErrInvalidCredentials     = errors.New("invalid credentials")
+	ErrInvalidBirthDate       = errors.New("invalid birth date, expected format dd.mm.yyyy")
+	ErrUserNotFound           = errors.New("user not found")
+	ErrPasswordDoNotMatch     = errors.New("confirm_new does not match new_password")
+	ErrNewPasswordSameAsOld   = errors.New("new password must not match old password")
+	ErrEmailSameAsCurrent     = errors.New("new email must not match current email")
+	ErrPasswordIsRequired     = errors.New("password is required")
+	ErrNewEmailIsRequired     = errors.New("new_email is required")
 )
 
 var allowedDomains = map[string]bool{
-	"yandex.ru": true,
-	"yandex.com": true,
-	"ya.ru": true,
-	"mail.ru": true,
-	"inbox.ru": true,
-	"rambler.ru": true,
-	"gmail.com": true,
+	"yandex.ru":      true,
+	"yandex.com":     true,
+	"ya.ru":          true,
+	"mail.ru":        true,
+	"inbox.ru":       true,
+	"rambler.ru":     true,
+	"gmail.com":      true,
 	"googlemail.com": true,
-	"outlook.com": true,
-	"icloud.com": true,
-	"yahoo.com": true,
-	"mail.com": true,
-	"sfedu.ru": true,
+	"outlook.com":    true,
+	"icloud.com":     true,
+	"yahoo.com":      true,
+	"mail.com":       true,
+	"sfedu.ru":       true,
 }
 
 type JWTClaims struct {
-	UserID int64  `json:"user_id"`
-	Email string `json:"email"`
+	UserID   int64  `json:"user_id"`
+	Email    string `json:"email"`
 	Position string `json:"position"`
 	jwt.RegisteredClaims
 }
 
 type AuthService struct {
-	db *sql.DB
+	db       *sql.DB
 	jwtToken []byte
 }
 
 func NewAuthService(db *sql.DB, jwtToken string) *AuthService {
 	return &AuthService{
-		db: db,
+		db:       db,
 		jwtToken: []byte(jwtToken),
 	}
 }
 
-// временная организация роли
 func validatePosition(position string) bool {
+	position = strings.ToLower(strings.TrimSpace(position))
+
 	switch position {
 	case "backend", "frontend", "fullstack", "mobile", "uiux",
 		"devops", "software architect", "tech lead", "qa automation",
@@ -74,7 +81,7 @@ func validatePosition(position string) bool {
 
 func normalizeAndValidateEmail(email string) (string, error) {
 	email = strings.ToLower(strings.TrimSpace(email))
-	if email == "" {
+	if email == "" || len(email) < 5 {
 		return "", ErrInvalidEmail
 	}
 	parts := strings.Split(email, "@")
@@ -99,16 +106,67 @@ func hashPassword(plain string) (string, error) {
 	return string(hash), nil
 }
 
+func (s *AuthService) getUserByIDWithPassword(ctx context.Context, userID int64) (models.User, string, error) {
+	var (
+		user           models.User
+		passwordHash   string
+		avatarField    sql.NullString
+		birthDateField sql.NullTime
+		aboutField     sql.NullString
+	)
+
+	err := s.db.QueryRowContext(ctx, `
+		SELECT
+			id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at, password_hash
+		FROM users
+		WHERE id = $1
+	`, userID).Scan(
+		&user.ID,
+		&user.FullName,
+		&avatarField,
+		&user.Email,
+		&user.Position,
+		&birthDateField,
+		&aboutField,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+		&passwordHash,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return models.User{}, "", ErrUserNotFound
+		}
+		return models.User{}, "", fmt.Errorf("select user by id: %w", err)
+	}
+
+	if avatarField.Valid {
+		user.AvatarURL = &avatarField.String
+	}
+
+	if birthDateField.Valid {
+		bd := birthDateField.Time.Format("02.01.2006")
+		user.BirthDate = &bd
+	}
+
+	if aboutField.Valid {
+		about := aboutField.String
+		user.About = &about
+	}
+
+	return user, passwordHash, nil
+}
+
 func (s *AuthService) generateToken(user models.User) (string, error) {
 	now := time.Now()
 	claims := JWTClaims{
-		UserID: user.ID,
-		Email: user.Email,
+		UserID:   user.ID,
+		Email:    user.Email,
 		Position: user.Position,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject: fmt.Sprint(user.ID),
+			Subject:   fmt.Sprint(user.ID),
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-			IssuedAt: jwt.NewNumericDate(now),
+			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
@@ -120,6 +178,9 @@ func (s *AuthService) generateToken(user models.User) (string, error) {
 }
 
 func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) (*models.RegisterResponse, error) {
+	req.FullName = strings.TrimSpace(req.FullName)
+	req.Position = strings.ToLower(strings.TrimSpace(req.Position))
+
 	if req.FullName == "" || req.Email == "" || req.Password == "" {
 		return nil, ErrMissingFields
 	}
@@ -135,7 +196,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, err
 	}
 
-	// разбор birth_date (опционально)
 	var birthDateParam interface{}
 	if req.BirthDate != nil && strings.TrimSpace(*req.BirthDate) != "" {
 		bdStr := strings.TrimSpace(*req.BirthDate)
@@ -148,7 +208,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		birthDateParam = nil
 	}
 
-	// about (опционально)
 	var aboutParam interface{}
 	if req.About != nil && strings.TrimSpace(*req.About) != "" {
 		aboutParam = strings.TrimSpace(*req.About)
@@ -181,11 +240,11 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	`
 
 	var (
-		user models.User
-		avatarField sql.NullString
-		avatarParam interface{}
+		user           models.User
+		avatarField    sql.NullString
+		avatarParam    interface{}
 		birthDateField sql.NullTime
-		aboutField sql.NullString
+		aboutField     sql.NullString
 	)
 
 	if req.AvatarURL != nil && *req.AvatarURL != "" {
@@ -250,11 +309,11 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*mode
 	}
 
 	var (
-		user models.User
-		passwordHash string
-		avatarField sql.NullString
+		user           models.User
+		passwordHash   string
+		avatarField    sql.NullString
 		birthDateField sql.NullTime
-		aboutField sql.NullString
+		aboutField     sql.NullString
 	)
 
 	err = s.db.QueryRowContext(ctx,
@@ -302,6 +361,169 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*mode
 	}
 
 	return &models.LoginResponse{
+		User:  user,
+		Token: token,
+	}, nil
+}
+
+func (s *AuthService) GetProfile(ctx context.Context, userID int64) (*models.User, error) {
+	var (
+		user           models.User
+		avatarField    sql.NullString
+		birthDateField sql.NullTime
+		aboutField     sql.NullString
+	)
+
+	err := s.db.QueryRowContext(
+		ctx,
+		`SELECT id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at
+		 FROM users
+		 WHERE id = $1`,
+		userID,
+	).Scan(
+		&user.ID,
+		&user.FullName,
+		&avatarField,
+		&user.Email,
+		&user.Position,
+		&birthDateField,
+		&aboutField,
+		&user.CreatedAt,
+		&user.UpdatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get profile: %w", err)
+	}
+
+	if avatarField.Valid {
+		user.AvatarURL = &avatarField.String
+	}
+	if birthDateField.Valid {
+		bd := birthDateField.Time.Format("02.01.2006")
+		user.BirthDate = &bd
+	}
+	if aboutField.Valid {
+		about := aboutField.String
+		user.About = &about
+	}
+
+	return &user, nil
+}
+
+func (s *AuthService) ChangePassword(ctx context.Context, userID int64, req models.ChangePasswordRequest) (*models.ChangePasswordResponse, error) {
+	req.OldPassword = strings.TrimSpace(req.OldPassword)
+	req.NewPassword = strings.TrimSpace(req.NewPassword)
+	req.ConfirmNew = strings.TrimSpace(req.ConfirmNew)
+
+	if req.OldPassword == "" || req.NewPassword == "" || req.ConfirmNew == "" {
+		return nil, ErrMissingFields
+	}
+	if len(req.NewPassword) < 8 {
+		return nil, ErrWeakPassword
+	}
+	if req.NewPassword == req.OldPassword {
+		return nil, ErrNewPasswordSameAsOld
+	}
+	if req.NewPassword != req.ConfirmNew {
+		return nil, ErrPasswordDoNotMatch
+	}
+
+	user, passwordHash, err := s.getUserByIDWithPassword(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.OldPassword)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	newHash, err := hashPassword(req.NewPassword)
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE users
+		SET password_hash = $1, updated_at = NOW()
+		WHERE id = $2
+	`, newHash, userID)
+	if err != nil {
+		return nil, fmt.Errorf("update password: %w", err)
+	}
+
+	token, err := s.generateToken(user)
+	if err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+
+	return &models.ChangePasswordResponse{
+		User:  user,
+		Token: token,
+	}, nil
+}
+
+func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.ChangeEmailRequest) (*models.ChangeEmailResponse, error) {
+	req.NewEmail = strings.TrimSpace(req.NewEmail)
+	req.Password = strings.TrimSpace(req.Password)
+
+	if req.NewEmail == "" {
+		return nil, ErrNewEmailIsRequired
+	}
+	if req.Password == "" {
+		return nil, ErrPasswordIsRequired
+	}
+
+	newEmail, err := normalizeAndValidateEmail(req.NewEmail)
+	if err != nil {
+		return nil, err
+	}
+
+	user, passwordHash, err := s.getUserByIDWithPassword(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	if strings.EqualFold(user.Email, newEmail) {
+		return nil, ErrEmailSameAsCurrent
+	}
+
+	var exists bool
+	err = s.db.QueryRowContext(ctx,
+		`SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`,
+		newEmail,
+	).Scan(&exists)
+	if err != nil {
+		return nil, fmt.Errorf("check email exists: %w", err)
+	}
+	if exists {
+		return nil, ErrEmailAlreadyTaken
+	}
+
+	_, err = s.db.ExecContext(ctx, `
+		UPDATE users
+		SET email = $1, updated_at = NOW()
+		WHERE id = $2
+	`, newEmail, userID)
+	if err != nil {
+		return nil, fmt.Errorf("update email: %w", err)
+	}
+
+	user.Email = newEmail
+
+	token, err := s.generateToken(user)
+	if err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+
+	return &models.ChangeEmailResponse{
 		User:  user,
 		Token: token,
 	}, nil
