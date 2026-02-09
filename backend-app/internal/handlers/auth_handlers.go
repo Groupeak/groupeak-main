@@ -1,10 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 
+	"groupeak/internal/middleware"
 	"groupeak/internal/models"
 	"groupeak/internal/services"
 )
@@ -19,24 +22,46 @@ func NewAuthHandler(authService *services.AuthService) *AuthHandler {
 	}
 }
 
-func writeJSON(write http.ResponseWriter, status int, data interface{}) {
-	write.Header().Set("Content-Type", "application/json; charset=utf-8")
-	write.WriteHeader(status)
-	_ = json.NewEncoder(write).Encode(data)
+const maxJSONBody = 1 << 20 // 1 Mb
+
+func writeJSON(w http.ResponseWriter, status int, data interface{}) error {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.WriteHeader(status)
+	return json.NewEncoder(w).Encode(data)
 }
 
-func writeError(write http.ResponseWriter, status int, msg string) {
-	writeJSON(write, status, map[string]string{
-		"error": msg,
-	})
+func writeError(w http.ResponseWriter, status int, msg string) {
+	_ = writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	if err := dec.Decode(&struct{}{}); err != io.EOF {
+		return errors.New("request body must constain only one JSON object")
+	}
+
+	return nil
+}
+
+func getUserIDFromContext(ctx context.Context) (int64, bool) {
+	v := ctx.Value(middleware.UserIDKey)
+	id, ok := v.(int64)
+	return id, ok
 }
 
 // Register — HTTP-эндпоинт регистрации.
-func (h *AuthHandler) Register(write http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req models.RegisterRequest
 
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(write, http.StatusBadRequest, "invalid JSON body")
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -44,45 +69,45 @@ func (h *AuthHandler) Register(write http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrEmailAlreadyTaken):
-			writeError(write, http.StatusConflict, "email already taken")
+			writeError(w, http.StatusConflict, "email already taken")
 			return
 		case errors.Is(err, services.ErrInvalidPosition):
-			writeError(write, http.StatusBadRequest, "invalid position")
+			writeError(w, http.StatusBadRequest, "invalid position")
 			return
 		case errors.Is(err, services.ErrMissingFields):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, services.ErrWeakPassword):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, services.ErrInvalidEmail):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, services.ErrUnsupportedEmailDomain):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		case errors.Is(err, services.ErrInvalidBirthDate):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 			return
 		default:
-			writeError(write, http.StatusInternalServerError, "internal server error")
+			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
 		}
 	}
 
-	writeJSON(write, http.StatusCreated, resp)
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 // Login — HTTP-эндпоинт авторизации.
-func (h *AuthHandler) Login(write http.ResponseWriter, r *http.Request) {
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req models.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(write, http.StatusBadRequest, "invalid JSON body")
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	if req.Email == "" || req.Password == "" {
-		writeError(write, http.StatusBadRequest, "email and password are required")
+		writeError(w, http.StatusBadRequest, "email and password are required")
 		return
 	}
 
@@ -90,16 +115,106 @@ func (h *AuthHandler) Login(write http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrInvalidEmail):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, services.ErrUnsupportedEmailDomain):
-			writeError(write, http.StatusBadRequest, err.Error())
+			writeError(w, http.StatusBadRequest, err.Error())
 		case errors.Is(err, services.ErrInvalidCredentials):
-			writeError(write, http.StatusUnauthorized, err.Error())
+			writeError(w, http.StatusUnauthorized, err.Error())
 		default:
-			writeError(write, http.StatusInternalServerError, "internal server error")
+			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
 
-	writeJSON(write, http.StatusOK, resp)
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	user, err := h.authService.GetProfile(r.Context(), userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrUserNotFound):
+			writeError(w, http.StatusNotFound, "user not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, map[string]interface{}{"user": user})
+}
+
+// ChangePassword — POST /api/v1/user/change-password
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req models.ChangePasswordRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	resp, err := h.authService.ChangePassword(r.Context(), userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidCredentials):
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
+		case errors.Is(err, services.ErrWeakPassword),
+			errors.Is(err, services.ErrNewPasswordSameAsOld),
+			errors.Is(err, services.ErrPasswordDoNotMatch),
+			errors.Is(err, services.ErrMissingFields):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, resp)
+}
+
+// ChangeEmail — POST /api/v1/user/change-email
+func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req models.ChangeEmailRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	resp, err := h.authService.ChangeEmail(r.Context(), userID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrInvalidCredentials):
+			writeError(w, http.StatusUnauthorized, "invalid credentials")
+		case errors.Is(err, services.ErrEmailAlreadyTaken):
+			writeError(w, http.StatusConflict, "email already taken")
+		case errors.Is(err, services.ErrInvalidEmail),
+			errors.Is(err, services.ErrUnsupportedEmailDomain),
+			errors.Is(err, services.ErrEmailSameAsCurrent),
+			errors.Is(err, services.ErrNewEmailIsRequired),
+			errors.Is(err, services.ErrPasswordIsRequired):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, resp)
 }
