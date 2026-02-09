@@ -5,16 +5,22 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"groupeak/internal/models"
 )
 
 var (
-	ErrTaskNotFound = errors.New("task not found")
-	ErrNotProjectMember = errors.New("user is not a member of this project")
-	ErrInvalidTaskStatus = errors.New("invalid task status for this operation")
-	ErrNotTaskAssignee = errors.New("user is not assignee of this task")
+	ErrTaskNotFound           = errors.New("task not found")
+	ErrInvalidTaskStatus      = errors.New("invalid task status for this operation")
+	ErrNotTaskAssignee        = errors.New("user is not assignee of this task")
+	ErrTaskTitleRequired      = errors.New("task title is required")
+	ErrInvalidTaskPriority    = errors.New("invalid task priority")
+	ErrInvalidTaskStatusValue = errors.New("invalid task status")
+	ErrInvalidAssigneeIDs     = errors.New("invalid assignee_ids")
+	ErrAssigneeNotFound       = errors.New("one or more assignees do not exist")
+	ErrAssigneesNotInProject  = errors.New("one or more assignees have no access to this project")
 )
 
 type TaskService struct {
@@ -22,15 +28,14 @@ type TaskService struct {
 }
 
 func NewTaskService(db *sql.DB) *TaskService {
-	return &TaskService{
-		db: db,
-	}
+	return &TaskService{db: db}
 }
 
+// CreateTask — создавать может только owner проекта
 func (s *TaskService) CreateTask(ctx context.Context, ownerID, projectID int64, req models.CreateTaskRequest) (*models.Task, error) {
-	title := strings.TrimSpace(req.Title)
+	title := strings.TrimSpace(req.TaskName)
 	if title == "" {
-		return nil, errors.New("task title is required")
+		return nil, ErrTaskTitleRequired
 	}
 
 	var dbOwnerID int64
@@ -39,68 +44,93 @@ func (s *TaskService) CreateTask(ctx context.Context, ownerID, projectID int64, 
 		`SELECT owner_id FROM projects WHERE id = $1`,
 		projectID,
 	).Scan(&dbOwnerID)
+
 	if err == sql.ErrNoRows {
 		return nil, ErrProjectNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query project owner: %w", err)
+		return nil, fmt.Errorf("select project owner: %w", err)
 	}
 	if dbOwnerID != ownerID {
 		return nil, ErrNotProjectOwner
 	}
 
-	switch req.Priority {
-	case "low", "medium", "high":
+	status := req.Status
+	if status == "" {
+		status = models.TaskStatusTodo
+	}
+	switch status {
+	case models.TaskStatusTodo, models.TaskStatusInProgress, models.TaskStatusDone, models.TaskStatusPostponed:
 	default:
-		return nil, errors.New("invalid task priority")
+		return nil, ErrInvalidTaskStatusValue
 	}
 
-	var (
-		descParam interface{}
-		commentsParam interface{}
-		dueParam interface{}
-	)
+	priority := req.Priority
+	if priority == "" {
+		priority = models.TaskPriorityMedium
+	}
+	switch priority {
+	case models.TaskPriorityLow, models.TaskPriorityMedium, models.TaskPriorityHigh:
+	default:
+		return nil, ErrInvalidTaskPriority
+	}
 
-	if req.Description != nil && strings.TrimSpace(*req.Description) != "" {
-		descParam = strings.TrimSpace(*req.Description)
+	var descParam interface{}
+	if req.TaskDescription != nil && strings.TrimSpace(*req.TaskDescription) != "" {
+		descParam = strings.TrimSpace(*req.TaskDescription)
 	} else {
 		descParam = nil
 	}
 
-	if req.Comments != nil && strings.TrimSpace(*req.Comments) != "" {
-		commentsParam = strings.TrimSpace(*req.Comments)
-	} else {
-		commentsParam = nil
-	}
-
-	if req.DueAt != nil {
-		dueParam = *req.DueAt
+	var dueParam interface{}
+	if req.DueDate != nil {
+		dueParam = *req.DueDate
 	} else {
 		dueParam = nil
 	}
 
+	assigneeIDs, err := normalizeAssigneeIDs(req.AssigneeIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(assigneeIDs) > 0 {
+		if err := s.ensureUsersExist(ctx, assigneeIDs); err != nil {
+			return nil, err
+		}
+		if err := s.ensureUsersAreProjectMembers(ctx, projectID, assigneeIDs); err != nil {
+			return nil, err
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	query := `
-		INSERT INTO tasks (project_id, title, description, comments, priority, due_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO tasks (project_id, title, description, comments, status, priority, due_at)
+		VALUES ($1, $2, $3, NULL, $4, $5, $6)
 		RETURNING id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at;
 	`
 
 	var (
-		t models.Task
-		descField sql.NullString
+		t             models.Task
+		descField     sql.NullString
 		commentsField sql.NullString
-		dueField sql.NullTime
 		assigneeField sql.NullInt64
+		dueField      sql.NullTime
 	)
 
-	err = s.db.QueryRowContext(
+	err = tx.QueryRowContext(
 		ctx,
 		query,
 		projectID,
 		title,
 		descParam,
-		commentsParam,
-		req.Priority,
+		status,
+		priority,
 		dueParam,
 	).Scan(
 		&t.ID,
@@ -120,58 +150,239 @@ func (s *TaskService) CreateTask(ctx context.Context, ownerID, projectID int64, 
 	}
 
 	if descField.Valid {
-		desc := descField.String
-		t.Description = &desc
+		v := descField.String
+		t.Description = &v
 	}
 	if commentsField.Valid {
-		c := commentsField.String
-		t.Comments = &c
-	}
-	if dueField.Valid {
-		dt := dueField.Time
-		t.DueAt = &dt
+		v := commentsField.String
+		t.Comments = &v
 	}
 	if assigneeField.Valid {
-		id := assigneeField.Int64
-		t.AssigneeID = &id
+		v := assigneeField.Int64
+		t.AssigneeID = &v
+	}
+	if dueField.Valid {
+		v := dueField.Time
+		t.DueAt = &v
+	}
+
+	for _, uid := range assigneeIDs {
+		_, err = tx.ExecContext(
+			ctx,
+			`INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+			t.ID,
+			uid,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("insert task_assignees: %w", err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	t.AssigneeIDs = assigneeIDs
+	if t.AssigneeIDs == nil {
+		t.AssigneeIDs = []int64{}
 	}
 
 	return &t, nil
 }
 
+// ListProjectTasks — список задач проекта + assignee_ids
+func (s *TaskService) ListProjectTasks(ctx context.Context, userID, projectID int64) ([]models.Task, error) {
+	if err := s.ensureProjectExists(ctx, projectID); err != nil {
+		return nil, err
+	}
+
+	if err := s.ensureProjectMember(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
+		FROM tasks
+		WHERE project_id = $1
+		ORDER BY created_at DESC;
+	`, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0)
+	taskIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID,
+			&t.ProjectID,
+			&t.Title,
+			&descField,
+			&commentsField,
+			&t.Status,
+			&t.Priority,
+			&assigneeField,
+			&dueField,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range tasks {
+		ids := assigneesMap[tasks[i].ID]
+		if ids == nil {
+			ids = []int64{}
+		}
+		tasks[i].AssigneeIDs = ids
+	}
+
+	return tasks, nil
+}
+
+// GetProjectTaskByID — одна задача проекта + assignee_ids
+func (s *TaskService) GetProjectTaskByID(ctx context.Context, userID, projectID, taskID int64) (*models.Task, error) {
+	if err := s.ensureProjectExists(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureProjectMember(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+
+	t, err := s.getTaskByID(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+
+	if t.ProjectID != projectID {
+		return nil, ErrTaskNotFound
+	}
+
+	return t, nil
+}
+
+// ensureProjectExists — чтобы отличать "проекта нет" от "ты не участник"
+func (s *TaskService) ensureProjectExists(ctx context.Context, projectID int64) error {
+	var id int64
+	err := s.db.QueryRowContext(ctx, `SELECT id FROM projects WHERE id = $1`, projectID).Scan(&id)
+	if err == sql.ErrNoRows {
+		return ErrProjectNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("ensureProjectExists: %w", err)
+	}
+	return nil
+}
+
+// ensureProjectMember — доступ по таблице project_members (owner тоже там есть)
+func (s *TaskService) ensureProjectMember(ctx context.Context, projectID, userID int64) error {
+	var ok bool
+	err := s.db.QueryRowContext(ctx, `
+		SELECT EXISTS(
+			SELECT 1 FROM project_members
+			WHERE project_id = $1 AND user_id = $2
+		);
+	`, projectID, userID).Scan(&ok)
+	if err != nil {
+		return fmt.Errorf("ensureProjectMember: %w", err)
+	}
+	if !ok {
+		return ErrNotProjectMember
+	}
+	return nil
+}
+
+// getAssigneesForTasks — 1 запросом вытягиваем исполнителей для набора taskID
+func (s *TaskService) getAssigneesForTasks(ctx context.Context, taskIDs []int64) (map[int64][]int64, error) {
+	ph := makePlaceholders(1, len(taskIDs))
+	query := `SELECT task_id, user_id FROM task_assignees WHERE task_id IN (` + ph + `) ORDER BY task_id, user_id;`
+
+	args := make([]interface{}, 0, len(taskIDs))
+	for _, id := range taskIDs {
+		args = append(args, id)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("query task_assignees: %w", err)
+	}
+	defer rows.Close()
+
+	out := make(map[int64][]int64)
+	for rows.Next() {
+		var taskID, userID int64
+		if err := rows.Scan(&taskID, &userID); err != nil {
+			return nil, fmt.Errorf("scan task_assignees: %w", err)
+		}
+		out[taskID] = append(out[taskID], userID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows task_assignees: %w", err)
+	}
+
+	return out, nil
+}
+
+// TakeTask — добавляем пользователя в task_assignees
 func (s *TaskService) TakeTask(ctx context.Context, userID, taskID int64) (*models.Task, error) {
 	var (
 		projectID int64
-		status string
-		title string
-		descField sql.NullString
-		commentsField sql.NullString
-		dueField sql.NullTime
-		priority string
-		createdAt sql.NullTime
-		updatedAt sql.NullTime
-		assigneeField sql.NullInt64
+		status    string
 	)
 
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
-		FROM tasks
-		WHERE id = $1`,
+		`SELECT project_id, status FROM tasks WHERE id = $1`,
 		taskID,
-	).Scan(
-		&taskID,
-		&projectID,
-		&title,
-		&descField,
-		&commentsField,
-		&status,
-		&priority,
-		&assigneeField,
-		&dueField,
-		&createdAt,
-		&updatedAt,
-	)
+	).Scan(&projectID, &status)
+
 	if err == sql.ErrNoRows {
 		return nil, ErrTaskNotFound
 	}
@@ -183,9 +394,7 @@ func (s *TaskService) TakeTask(ctx context.Context, userID, taskID int64) (*mode
 	err = s.db.QueryRowContext(
 		ctx,
 		`SELECT EXISTS (
-			SELECT 1
-			FROM project_members
-			WHERE project_id = $1 AND user_id = $2
+			SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2
 		)`,
 		projectID,
 		userID,
@@ -201,18 +410,23 @@ func (s *TaskService) TakeTask(ctx context.Context, userID, taskID int64) (*mode
 		return nil, ErrInvalidTaskStatus
 	}
 
+	_, _ = s.db.ExecContext(
+		ctx,
+		`INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+		taskID, userID,
+	)
+
 	_, err = s.db.ExecContext(
 		ctx,
 		`UPDATE tasks
-		SET status = 'in_progress',
-		    assignee_id = $1,
-		    updated_at = NOW()
-		WHERE id = $2`,
-		userID,
-		taskID,
+		 SET status = 'in_progress',
+		     assignee_id = $1,
+		     updated_at = NOW()
+		 WHERE id = $2`,
+		userID, taskID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("update task status: %w", err)
+		return nil, fmt.Errorf("update task: %w", err)
 	}
 
 	return s.getTaskByID(ctx, taskID)
@@ -220,45 +434,21 @@ func (s *TaskService) TakeTask(ctx context.Context, userID, taskID int64) (*mode
 
 func (s *TaskService) CompleteTask(ctx context.Context, userID, taskID int64) (*models.Task, error) {
 	var (
-		projectID int64
-		status string
+		status        string
 		assigneeField sql.NullInt64
 	)
 
 	err := s.db.QueryRowContext(
 		ctx,
-		`SELECT project_id, status, assignee_id
-		FROM tasks
-		WHERE id = $1`,
+		`SELECT status, assignee_id FROM tasks WHERE id = $1`,
 		taskID,
-	).Scan(
-		&projectID,
-		&status,
-		&assigneeField,
-	)
+	).Scan(&status, &assigneeField)
+
 	if err == sql.ErrNoRows {
 		return nil, ErrTaskNotFound
 	}
 	if err != nil {
 		return nil, fmt.Errorf("query task before complete: %w", err)
-	}
-
-	var isMember bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`SELECT EXISTS (
-			SELECT 1
-			FROM project_members
-			WHERE project_id = $1 AND user_id = $2
-		)`,
-		projectID,
-		userID,
-	).Scan(&isMember)
-	if err != nil {
-		return nil, fmt.Errorf("check project member: %w", err)
-	}
-	if !isMember {
-		return nil, ErrNotProjectMember
 	}
 
 	if status != "in_progress" {
@@ -269,36 +459,32 @@ func (s *TaskService) CompleteTask(ctx context.Context, userID, taskID int64) (*
 		return nil, ErrNotTaskAssignee
 	}
 
-	// ставим done
 	_, err = s.db.ExecContext(
 		ctx,
-		`UPDATE tasks
-		SET status = 'done',
-		    updated_at = NOW()
-		WHERE id = $1`,
+		`UPDATE tasks SET status = 'done', updated_at = NOW() WHERE id = $1`,
 		taskID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("update task to done: %w", err)
+		return nil, fmt.Errorf("complete task: %w", err)
 	}
 
 	return s.getTaskByID(ctx, taskID)
 }
 
+// getTaskByID — возвращает и список assignee_ids
 func (s *TaskService) getTaskByID(ctx context.Context, taskID int64) (*models.Task, error) {
 	query := `
-		SELECT id, project_id, title, description, comments, status, priority,
-		       assignee_id, due_at, created_at, updated_at
+		SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
 		FROM tasks
 		WHERE id = $1;
 	`
 
 	var (
-		t models.Task
-		descField sql.NullString
+		t             models.Task
+		descField     sql.NullString
 		commentsField sql.NullString
-		dueField sql.NullTime
 		assigneeField sql.NullInt64
+		dueField      sql.NullTime
 	)
 
 	err := s.db.QueryRowContext(ctx, query, taskID).Scan(
@@ -318,35 +504,166 @@ func (s *TaskService) getTaskByID(ctx context.Context, taskID int64) (*models.Ta
 		return nil, ErrTaskNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("query task by id: %w", err)
+		return nil, fmt.Errorf("getTaskByID: %w", err)
 	}
 
 	if descField.Valid {
-		desc := descField.String
-		t.Description = &desc
+		v := descField.String
+		t.Description = &v
 	}
 	if commentsField.Valid {
-		c := commentsField.String
-		t.Comments = &c
-	}
-	if dueField.Valid {
-		dt := dueField.Time
-		t.DueAt = &dt
+		v := commentsField.String
+		t.Comments = &v
 	}
 	if assigneeField.Valid {
-		id := assigneeField.Int64
-		t.AssigneeID = &id
+		v := assigneeField.Int64
+		t.AssigneeID = &v
+	}
+	if dueField.Valid {
+		v := dueField.Time
+		t.DueAt = &v
+	}
+
+	ids, err := s.getTaskAssigneeIDs(ctx, taskID)
+	if err != nil {
+		return nil, err
+	}
+	t.AssigneeIDs = ids
+	if t.AssigneeIDs == nil {
+		t.AssigneeIDs = []int64{}
 	}
 
 	return &t, nil
 }
 
-/*
-Что ещё можно добавить позже (идеи на будущее):
+func (s *TaskService) getTaskAssigneeIDs(ctx context.Context, taskID int64) ([]int64, error) {
+	rows, err := s.db.QueryContext(
+		ctx,
+		`SELECT user_id FROM task_assignees WHERE task_id = $1 ORDER BY user_id`,
+		taskID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("query task_assignees: %w", err)
+	}
+	defer rows.Close()
 
-PostponeTask — отложить (статус → postponed)
-ReturnToTodo — вернуть в To Do (сбросить)
-ChangeAssignee — передать задачу другому (только owner или текущий assignee)
-UpdateTask — менять заголовок, описание, дедлайн
-DeleteTask — удалять (с проверкой прав)
-*/
+	out := make([]int64, 0)
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("scan task_assignees: %w", err)
+		}
+		out = append(out, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows task_assignees: %w", err)
+	}
+
+	return out, nil
+}
+
+func normalizeAssigneeIDs(ids []int) ([]int64, error) {
+	if len(ids) == 0 {
+		return []int64{}, nil
+	}
+
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+
+	for _, v := range ids {
+		if v <= 0 {
+			return nil, ErrInvalidAssigneeIDs
+		}
+		id := int64(v)
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+
+	return out, nil
+}
+
+func (s *TaskService) ensureUsersExist(ctx context.Context, ids []int64) error {
+	ph := makePlaceholders(1, len(ids))
+	query := `SELECT id FROM users WHERE id IN (` + ph + `);`
+
+	args := make([]interface{}, 0, len(ids))
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("ensureUsersExist: %w", err)
+	}
+	defer rows.Close()
+
+	found := make(map[int64]struct{}, len(ids))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan users exist: %w", err)
+		}
+		found[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows users exist: %w", err)
+	}
+
+	if len(found) != len(ids) {
+		return ErrAssigneeNotFound
+	}
+	return nil
+}
+
+func (s *TaskService) ensureUsersAreProjectMembers(ctx context.Context, projectID int64, ids []int64) error {
+	ph := makePlaceholders(2, len(ids))
+	query := `
+		SELECT user_id
+		FROM project_members
+		WHERE project_id = $1 AND user_id IN (` + ph + `);
+	`
+
+	args := make([]interface{}, 0, 1+len(ids))
+	args = append(args, projectID)
+	for _, id := range ids {
+		args = append(args, id)
+	}
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("ensureUsersAreProjectMembers: %w", err)
+	}
+	defer rows.Close()
+
+	found := make(map[int64]struct{}, len(ids))
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return fmt.Errorf("scan project members: %w", err)
+		}
+		found[id] = struct{}{}
+	}
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("rows project members: %w", err)
+	}
+
+	if len(found) != len(ids) {
+		return ErrAssigneesNotInProject
+	}
+	return nil
+}
+
+func makePlaceholders(start, count int) string {
+	var b strings.Builder
+	for i := 0; i < count; i++ {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		b.WriteByte('$')
+		b.WriteString(strconv.Itoa(start + i))
+	}
+	return b.String()
+}
