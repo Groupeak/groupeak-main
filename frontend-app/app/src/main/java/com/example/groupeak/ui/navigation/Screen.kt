@@ -10,4 +10,6 @@ sealed class Screen(val route: String) {
     object Feedback : Screen("feedback")
     object ChangeEmail : Screen("change_email")
     object ChangePassword : Screen("change_password")
+    object Tasks : Screen("tasks")
+    object Calendar : Screen("calendar")
 }

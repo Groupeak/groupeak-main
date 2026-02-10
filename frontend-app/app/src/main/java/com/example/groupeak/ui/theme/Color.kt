@@ -35,3 +35,4 @@ val Gray650 = Color(0xFF7A7A7A)
 val Gray700 = Color(0xFF1876FF)
 
 val Cyan = Color(0xFF65C1E5)
+val NavButtonActive = Color(0xFF0055FF)
