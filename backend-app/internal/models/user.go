@@ -59,3 +59,17 @@ type ChangeEmailResponse struct {
 	User  User   `json:"user"`
 	Token string `json:"token"`
 }
+
+// UpdateProfileRequest содержит опциональные поля для обновления профиля
+type UpdateProfileRequest struct {
+	FullName  *string `json:"full_name,omitempty"`
+	AvatarURL *string `json:"avatar_url,omitempty"`
+	BirthDate *string `json:"birth_date,omitempty"` // формат "dd.mm.yyyy"
+	About     *string `json:"about,omitempty"`
+}
+
+// UpdateProfileResponse возвращает обновленные данные пользователя
+type UpdateProfileResponse struct {
+	User  User   `json:"user"`
+	Token string `json:"token,omitempty"` // новый токен, если изменились данные, влияющие на токен
+}
