@@ -528,3 +528,130 @@ func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.
 		Token: token,
 	}, nil
 }
+
+// UpdateProfile обновляет данные профиля пользователя
+func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req models.UpdateProfileRequest) (*models.UpdateProfileResponse, error) {
+	// Получить текущего пользователя
+	_, _, err := s.getUserByIDWithPassword(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user by ID: %w", err)
+	}
+
+	// Подготовить параметры для обновления
+	var (
+		setClauses []string
+		args       []interface{}
+		argIndex   = 1
+	)
+
+	// Проверить и обработать каждое поле
+	if req.FullName != nil {
+		fullName := strings.TrimSpace(*req.FullName)
+		if fullName == "" {
+			return nil, errors.New("full name cannot be empty")
+		}
+		setClauses = append(setClauses, fmt.Sprintf("full_name = $%d", argIndex))
+		args = append(args, fullName)
+		argIndex++
+	}
+	if req.AvatarURL != nil {
+		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argIndex))
+		if *req.AvatarURL == "" {
+			args = append(args, nil)
+		} else {
+			args = append(args, *req.AvatarURL)
+		}
+		argIndex++
+	}
+	if req.BirthDate != nil {
+		if *req.BirthDate == "" {
+			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
+			args = append(args, nil)
+			argIndex++
+		} else {
+			bdStr := strings.TrimSpace(*req.BirthDate)
+			parsed, err := time.Parse("02.01.2006", bdStr)
+			if err != nil {
+				return nil, ErrInvalidBirthDate
+			}
+			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
+			args = append(args, parsed)
+			argIndex++
+		}
+	}
+	if req.About != nil {
+		setClauses = append(setClauses, fmt.Sprintf("about = $%d", argIndex))
+		if *req.About == "" {
+			args = append(args, nil)
+		} else {
+			about := strings.TrimSpace(*req.About)
+			args = append(args, about)
+		}
+		argIndex++
+	}
+
+	// Если нет полей для обновления
+	if len(setClauses) == 0 {
+		return nil, errors.New("no fields to update")
+	}
+
+	// Добавить время обновления
+	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIndex))
+	args = append(args, time.Now())
+	argIndex++
+
+	// Добавить ID пользователя в аргументы
+	args = append(args, userID)
+
+	query := fmt.Sprintf(
+		"UPDATE users SET %s WHERE id = $%d RETURNING id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at",
+		strings.Join(setClauses, ", "),
+		argIndex,
+	)
+
+	var (
+		updatedUser    models.User
+		avatarField    sql.NullString
+		birthDateField sql.NullTime
+		aboutField     sql.NullString
+	)
+
+	err = s.db.QueryRowContext(ctx, query, args...).Scan(
+		&updatedUser.ID,
+		&updatedUser.FullName,
+		&avatarField,
+		&updatedUser.Email,
+		&updatedUser.Position,
+		&birthDateField,
+		&aboutField,
+		&updatedUser.CreatedAt,
+		&updatedUser.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update user: %w", err)
+	}
+
+	// Обработать nullable поля
+	if avatarField.Valid {
+		updatedUser.AvatarURL = &avatarField.String
+	}
+	if birthDateField.Valid {
+		bd := birthDateField.Time.Format("02.01.2006")
+		updatedUser.BirthDate = &bd
+	}
+	if aboutField.Valid {
+		about := aboutField.String
+		updatedUser.About = &about
+	}
+
+	// Сгенерировать новый токен
+	newToken, err := s.generateToken(updatedUser)
+	if err != nil {
+		return nil, fmt.Errorf("generate token: %w", err)
+	}
+
+	return &models.UpdateProfileResponse{
+		User:  updatedUser,
+		Token: newToken,
+	}, nil
+}
