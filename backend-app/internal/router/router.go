@@ -54,12 +54,6 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
 				r.Post("/change-email", authHandler.ChangeEmail)       // POST /api/v1/user/change-email
 				r.Get("/profile", authHandler.GetProfile)              // GET /api/v1/user/get-profile
-			})
-
-			r.Route("/user", func(r chi.Router) {
-				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
-				r.Post("/change-email", authHandler.ChangeEmail)       // POST /api/v1/user/change-email
-				r.Get("/profile", authHandler.GetProfile)              // GET /api/v1/user/get-profile
 				r.Put("/profile", authHandler.UpdateProfile)           // PUT /api/v1/user/profile
 			})
 
