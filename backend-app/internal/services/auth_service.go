@@ -28,6 +28,7 @@ var (
 	ErrEmailSameAsCurrent     = errors.New("new email must not match current email")
 	ErrPasswordIsRequired     = errors.New("password is required")
 	ErrNewEmailIsRequired     = errors.New("new_email is required")
+	ErrNothingToUpdate        = errors.New("nothing to update")
 )
 
 var allowedDomains = map[string]bool{
@@ -531,24 +532,21 @@ func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.
 
 // UpdateProfile обновляет данные профиля пользователя
 func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req models.UpdateProfileRequest) (*models.UpdateProfileResponse, error) {
-	// Получить текущего пользователя
 	_, _, err := s.getUserByIDWithPassword(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get user by ID: %w", err)
 	}
 
-	// Подготовить параметры для обновления
 	var (
 		setClauses []string
 		args       []interface{}
 		argIndex   = 1
 	)
 
-	// Проверить и обработать каждое поле
 	if req.FullName != nil {
 		fullName := strings.TrimSpace(*req.FullName)
 		if fullName == "" {
-			return nil, errors.New("full name cannot be empty")
+			return nil, ErrInvalidPosition
 		}
 		setClauses = append(setClauses, fmt.Sprintf("full_name = $%d", argIndex))
 		args = append(args, fullName)
@@ -590,17 +588,14 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		argIndex++
 	}
 
-	// Если нет полей для обновления
 	if len(setClauses) == 0 {
-		return nil, errors.New("no fields to update")
+		return nil, ErrNothingToUpdate
 	}
 
-	// Добавить время обновления
 	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIndex))
 	args = append(args, time.Now())
 	argIndex++
 
-	// Добавить ID пользователя в аргументы
 	args = append(args, userID)
 
 	query := fmt.Sprintf(
@@ -631,7 +626,6 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		return nil, fmt.Errorf("update user: %w", err)
 	}
 
-	// Обработать nullable поля
 	if avatarField.Valid {
 		updatedUser.AvatarURL = &avatarField.String
 	}
@@ -644,7 +638,6 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		updatedUser.About = &about
 	}
 
-	// Сгенерировать новый токен
 	newToken, err := s.generateToken(updatedUser)
 	if err != nil {
 		return nil, fmt.Errorf("generate token: %w", err)
