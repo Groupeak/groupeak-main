@@ -19,6 +19,16 @@ func NewTaskHandler(taskService *services.TaskService) *TaskHandler {
 	return &TaskHandler{taskService: taskService}
 }
 
+// parseIDParam — общий парсер числовых URL-параметров
+func parseIDParam(r *http.Request, name string) (int64, error) {
+	v := chi.URLParam(r, name)
+	id, err := strconv.ParseInt(v, 10, 64)
+	if err != nil || id <= 0 {
+		return 0, errors.New("invalid id")
+	}
+	return id, nil
+}
+
 // POST /api/v1/projects/{projectID}/tasks
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := getUserIDFromContext(r.Context())
@@ -136,46 +146,4 @@ func (h *TaskHandler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"task": task,
 	})
-}
-
-// parseIDParam — общий парсер числовых URL-параметров
-func parseIDParam(r *http.Request, name string) (int64, error) {
-	v := chi.URLParam(r, name)
-	id, err := strconv.ParseInt(v, 10, 64)
-	if err != nil || id <= 0 {
-		return 0, errors.New("invalid id")
-	}
-	return id, nil
-}
-
-// UpdateProfile — PUT /api/v1/user/profile
-func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	var req models.UpdateProfileRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-
-	resp, err := h.authService.UpdateProfile(r.Context(), userID, req)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidBirthDate):
-			writeError(w, http.StatusBadRequest, err.Error())
-		case err.Error() == "no fields to update":
-			writeError(w, http.StatusBadRequest, "no fields to update")
-		case err.Error() == "full name cannot be empty":
-			writeError(w, http.StatusBadRequest, "full name cannot be empty")
-		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
-		}
-		return
-	}
-
-	_ = writeJSON(w, http.StatusOK, resp)
 }
