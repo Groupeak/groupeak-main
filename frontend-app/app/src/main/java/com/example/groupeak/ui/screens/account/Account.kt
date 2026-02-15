@@ -33,7 +33,8 @@ fun AccountScreen(
     onContactClick: () -> Unit,
     onChangeEmailClick: () -> Unit,
     onChangePasswordClick: () -> Unit,
-    onLogoutClick: () -> Unit
+    onLogoutClick: () -> Unit,
+    onNotificationsClick: () -> Unit
 ) {
     GroupeakBackground {
         Column(
@@ -66,7 +67,7 @@ fun AccountScreen(
                         .align(Alignment.CenterEnd)
                         .padding(end = 19.dp)
                         .size(28.dp) // область нажатия
-                        .clickable { /* ... */ },
+                        .clickable { onNotificationsClick() },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(

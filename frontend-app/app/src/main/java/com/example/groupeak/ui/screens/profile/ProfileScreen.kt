@@ -729,7 +729,7 @@ private fun LabeledPositionSelectOverlay(
                 Popup(
                     popupPositionProvider = positionProvider,
                     onDismissRequest = { close() },
-                    properties = PopupProperties(focusable = true, dismissOnClickOutside = true, dismissOnBackPress = true)
+                    properties = PopupProperties(focusable = false, dismissOnClickOutside = true, dismissOnBackPress = true)
                 ) {
                     // Важно: ширина совпадает с полем (в дизайне 155dp)
                     Box(

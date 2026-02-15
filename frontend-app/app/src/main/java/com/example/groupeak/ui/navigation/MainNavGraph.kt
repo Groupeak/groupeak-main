@@ -11,8 +11,10 @@ import com.example.groupeak.ui.screens.account.AccountViewModel
 import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
 import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
+import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
+import com.example.groupeak.ui.navigation.Screen.*
 
 @Composable
 fun MainNavGraph(
@@ -22,24 +24,25 @@ fun MainNavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Account.route,
+        startDestination = Account.route,
         modifier = modifier
     ) {
-        composable(Screen.Account.route) {
+        composable(Account.route) {
             val vm: AccountViewModel = viewModel()
             val state = vm.uiState
 
             AccountScreen(
                 uiState = state,
-                onProfileClick = { navController.navigate(Screen.Profile.route) },
-                onContactClick = { navController.navigate(Screen.Feedback.route) },
-                onChangeEmailClick = { navController.navigate(Screen.ChangeEmail.route) },
-                onChangePasswordClick = { navController.navigate(Screen.ChangePassword.route) },
+                onProfileClick = { navController.navigate(Profile.route) },
+                onContactClick = { navController.navigate(Feedback.route) },
+                onChangeEmailClick = { navController.navigate(ChangeEmail.route) },
+                onChangePasswordClick = { navController.navigate(ChangePassword.route) },
+                onNotificationsClick = { navController.navigate(Notifications.route) },
                 onLogoutClick = onLogout
             )
         }
 
-        composable(Screen.Profile.route) {
+        composable(Profile.route) {
             val vm: ProfileViewModel = viewModel()
             val state = vm.uiState
 
@@ -49,7 +52,7 @@ fun MainNavGraph(
                 onEditClick = vm::onEditClick,
                 onSaveClick = vm::onSaveClick,
                 onCancelEdit = vm::onCancelEdit,
-                onNotificationsClick = { /* TODO */ },
+                onNotificationsClick = { navController.navigate(Notifications.route) },
                 onPositionClick = { /* TODO */ },
                 onFullNameChange = vm::onFullNameChange,
                 onBirthDateChange = vm::onBirthDateChange,
@@ -58,16 +61,25 @@ fun MainNavGraph(
             )
         }
 
-        composable(Screen.Feedback.route) {
-            FeedbackScreen(onBack = { navController.popBackStack() })
+        composable(Feedback.route) {
+            FeedbackScreen(
+                onBack = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Notifications.route) }
+            )
         }
 
-        composable(Screen.ChangeEmail.route) {
+        composable(ChangeEmail.route) {
             ChangeEmailScreen(onBack = { navController.popBackStack() })
         }
 
-        composable(Screen.ChangePassword.route) {
+        composable(ChangePassword.route) {
             ChangePasswordScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Notifications.route) {
+            NotificationsScreen(
+                onBack = { navController.popBackStack() }
+            )
         }
     }
 }
