@@ -89,6 +89,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, services.ErrInvalidBirthDate):
 			writeError(w, http.StatusBadRequest, err.Error())
 			return
+		case errors.Is(err, services.ErrBirthDateOutOfRange):
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
 		default:
 			writeError(w, http.StatusInternalServerError, "internal server error")
 			return
@@ -238,6 +241,8 @@ func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrInvalidBirthDate):
+			writeError(w, http.StatusBadRequest, err.Error())
+		case errors.Is(err, services.ErrBirthDateOutOfRange):
 			writeError(w, http.StatusBadRequest, err.Error())
 		case err.Error() == "no fields to update":
 			writeError(w, http.StatusBadRequest, "no fields to update")
