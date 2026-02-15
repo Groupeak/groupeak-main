@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.unit.dp
@@ -102,10 +103,12 @@ fun NotificationInviteDialog(
                 contentAlignment = Alignment.TopCenter
             ) {
 
+                // 🔷 ИЗМЕНЕНО ТОЛЬКО ЗДЕСЬ: заменил .background(..., shape) на .clip().background()
                 Column(
                     modifier = Modifier
                         .width(340.dp)
-                        .background(White, RoundedCornerShape(24.dp))
+                        .clip(RoundedCornerShape(24.dp))  // ✅ clip сохраняет закругление при анимации
+                        .background(White)
                         .animateContentSize(
                             animationSpec = spring(
                                 dampingRatio = 0.85f,
