@@ -21,9 +21,7 @@ android {
     }
 
     buildTypes {
-        debug {
-            buildConfigField("Boolean", "DEV_BYPASS_AUTH", "true")
-        }
+
         release {
             isMinifyEnabled = false
             proguardFiles(
@@ -54,6 +52,7 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation("androidx.navigation:navigation-compose:2.9.6")
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation(libs.androidx.compose.material3)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
