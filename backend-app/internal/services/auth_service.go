@@ -22,6 +22,7 @@ var (
 	ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
 	ErrInvalidCredentials     = errors.New("invalid credentials")
 	ErrInvalidBirthDate       = errors.New("invalid birth date, expected format dd.mm.yyyy")
+	ErrBirthDateOutOfRange    = errors.New("birth date must make age between 8 and 100 years")
 	ErrUserNotFound           = errors.New("user not found")
 	ErrPasswordDoNotMatch     = errors.New("confirm_new does not match new_password")
 	ErrNewPasswordSameAsOld   = errors.New("new password must not match old password")
@@ -30,6 +31,29 @@ var (
 	ErrNewEmailIsRequired     = errors.New("new_email is required")
 	ErrNothingToUpdate        = errors.New("nothing to update")
 )
+
+const (
+	minAgeYears = 8
+	maxAgeYears = 100
+)
+
+func calcAgeYears(birthDate, now time.Time) int {
+	age := now.Year() - birthDate.Year()
+	if now.Month() < birthDate.Month() || (now.Month() == birthDate.Month() && now.Day() < birthDate.Day()) {
+		age--
+	}
+	return age
+}
+
+func validateBirthDateAge(birthDate time.Time) error {
+	now := time.Now()
+	age := calcAgeYears(birthDate, now)
+
+	if age < minAgeYears || age > maxAgeYears {
+		return ErrBirthDateOutOfRange
+	}
+	return nil
+}
 
 var allowedDomains = map[string]bool{
 	"yandex.ru":      true,
@@ -197,7 +221,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, ErrWeakPassword
 	}
 
-	// position: можно не указывать -> NULL в БД
 	var positionParam interface{}
 	if req.Position != nil {
 		p := strings.TrimSpace(*req.Position)
@@ -206,7 +229,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 			positionParam = nil
 			req.Position = nil
 		} else {
-			// важно: НЕ ToLower(), потому что роли строго в нужном регистре
 			if !validatePosition(&p) {
 				return nil, ErrInvalidPosition
 			}
@@ -223,13 +245,23 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	}
 
 	var birthDateParam interface{}
-	if req.BirthDate != nil && strings.TrimSpace(*req.BirthDate) != "" {
+
+	if req.BirthDate != nil {
 		bdStr := strings.TrimSpace(*req.BirthDate)
-		parsed, err := time.Parse("02.01.2006", bdStr)
-		if err != nil {
-			return nil, ErrInvalidBirthDate
+
+		if bdStr != "" {
+			parsed, err := time.Parse("02.01.2006", bdStr)
+			if err != nil {
+				return nil, ErrInvalidBirthDate
+			}
+			if err := validateBirthDateAge(parsed); err != nil {
+				return nil, err
+			}
+
+			birthDateParam = parsed
+		} else {
+			birthDateParam = nil
 		}
-		birthDateParam = parsed
 	} else {
 		birthDateParam = nil
 	}
@@ -565,7 +597,6 @@ func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.
 	}, nil
 }
 
-// UpdateProfile обновляет данные профиля пользователя
 func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req models.UpdateProfileRequest) (*models.UpdateProfileResponse, error) {
 	_, _, err := s.getUserByIDWithPassword(ctx, userID)
 	if err != nil {
@@ -593,10 +624,8 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 
 		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argIndex))
 		if p == "" {
-			// пустая строка = хотим сбросить в NULL
 			args = append(args, nil)
 		} else {
-			// важно: НЕ ToLower(), роли строго в нужном регистре
 			if !validatePosition(&p) {
 				return nil, ErrInvalidPosition
 			}
@@ -616,16 +645,21 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 	}
 
 	if req.BirthDate != nil {
-		if *req.BirthDate == "" {
+		bdStr := strings.TrimSpace(*req.BirthDate)
+
+		if bdStr == "" {
 			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
 			args = append(args, nil)
 			argIndex++
 		} else {
-			bdStr := strings.TrimSpace(*req.BirthDate)
 			parsed, err := time.Parse("02.01.2006", bdStr)
 			if err != nil {
 				return nil, ErrInvalidBirthDate
 			}
+			if err := validateBirthDateAge(parsed); err != nil {
+				return nil, err
+			}
+
 			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
 			args = append(args, parsed)
 			argIndex++
