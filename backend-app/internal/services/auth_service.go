@@ -66,14 +66,16 @@ func NewAuthService(db *sql.DB, jwtToken string) *AuthService {
 	}
 }
 
-func validatePosition(position string) bool {
-	position = strings.ToLower(strings.TrimSpace(position))
+func validatePosition(position *string) bool {
+	if position == nil {
+		return true
+	}
 
-	switch position {
-	case "backend", "frontend", "fullstack", "mobile", "uiux",
-		"devops", "software architect", "tech lead", "qa automation",
-		"data engineer", "machine learning engineer", "embedded", "game",
-		"blockchain", "systems programmer", "pm":
+	val := strings.TrimSpace(*position)
+
+	switch val {
+	case "Frontend", "Backend", "Designer", "QA", "DevOps", "Android", "iOS",
+		"Data Analyst", "Product", "HR":
 		return true
 	default:
 		return false
@@ -160,16 +162,23 @@ func (s *AuthService) getUserByIDWithPassword(ctx context.Context, userID int64)
 
 func (s *AuthService) generateToken(user models.User) (string, error) {
 	now := time.Now()
+
+	position := ""
+	if user.Position != nil {
+		position = *user.Position
+	}
+
 	claims := JWTClaims{
 		UserID:   user.ID,
 		Email:    user.Email,
-		Position: user.Position,
+		Position: position,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Subject:   fmt.Sprint(user.ID),
 			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(now),
 		},
 	}
+
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signed, err := token.SignedString(s.jwtToken)
 	if err != nil {
@@ -180,7 +189,6 @@ func (s *AuthService) generateToken(user models.User) (string, error) {
 
 func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) (*models.RegisterResponse, error) {
 	req.FullName = strings.TrimSpace(req.FullName)
-	req.Position = strings.ToLower(strings.TrimSpace(req.Position))
 
 	if req.FullName == "" || req.Email == "" || req.Password == "" {
 		return nil, ErrMissingFields
@@ -188,8 +196,25 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if len(req.Password) < 8 {
 		return nil, ErrWeakPassword
 	}
-	if !validatePosition(req.Position) {
-		return nil, ErrInvalidPosition
+
+	// position: можно не указывать -> NULL в БД
+	var positionParam interface{}
+	if req.Position != nil {
+		p := strings.TrimSpace(*req.Position)
+
+		if p == "" {
+			positionParam = nil
+			req.Position = nil
+		} else {
+			// важно: НЕ ToLower(), потому что роли строго в нужном регистре
+			if !validatePosition(&p) {
+				return nil, ErrInvalidPosition
+			}
+			req.Position = &p
+			positionParam = p
+		}
+	} else {
+		positionParam = nil
 	}
 
 	email, err := normalizeAndValidateEmail(req.Email)
@@ -244,12 +269,13 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		user           models.User
 		avatarField    sql.NullString
 		avatarParam    interface{}
+		positionField  sql.NullString
 		birthDateField sql.NullTime
 		aboutField     sql.NullString
 	)
 
-	if req.AvatarURL != nil && *req.AvatarURL != "" {
-		avatarParam = *req.AvatarURL
+	if req.AvatarURL != nil && strings.TrimSpace(*req.AvatarURL) != "" {
+		avatarParam = strings.TrimSpace(*req.AvatarURL)
 	} else {
 		avatarParam = nil
 	}
@@ -261,7 +287,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		avatarParam,
 		email,
 		passwordHash,
-		req.Position,
+		positionParam,
 		birthDateParam,
 		aboutParam,
 	).Scan(
@@ -269,7 +295,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		&user.FullName,
 		&avatarField,
 		&user.Email,
-		&user.Position,
+		&positionField,
 		&birthDateField,
 		&aboutField,
 		&user.CreatedAt,
@@ -282,10 +308,19 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if avatarField.Valid {
 		user.AvatarURL = &avatarField.String
 	}
+
+	if positionField.Valid {
+		p := positionField.String
+		user.Position = &p
+	} else {
+		user.Position = nil
+	}
+
 	if birthDateField.Valid {
 		bd := birthDateField.Time.Format("02.01.2006")
 		user.BirthDate = &bd
 	}
+
 	if aboutField.Valid {
 		about := aboutField.String
 		user.About = &about
@@ -546,12 +581,30 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 	if req.FullName != nil {
 		fullName := strings.TrimSpace(*req.FullName)
 		if fullName == "" {
-			return nil, ErrInvalidPosition
+			return nil, ErrMissingFields
 		}
 		setClauses = append(setClauses, fmt.Sprintf("full_name = $%d", argIndex))
 		args = append(args, fullName)
 		argIndex++
 	}
+
+	if req.Position != nil {
+		p := strings.TrimSpace(*req.Position)
+
+		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argIndex))
+		if p == "" {
+			// пустая строка = хотим сбросить в NULL
+			args = append(args, nil)
+		} else {
+			// важно: НЕ ToLower(), роли строго в нужном регистре
+			if !validatePosition(&p) {
+				return nil, ErrInvalidPosition
+			}
+			args = append(args, p)
+		}
+		argIndex++
+	}
+
 	if req.AvatarURL != nil {
 		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argIndex))
 		if *req.AvatarURL == "" {
@@ -561,6 +614,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		}
 		argIndex++
 	}
+
 	if req.BirthDate != nil {
 		if *req.BirthDate == "" {
 			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
@@ -577,6 +631,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 			argIndex++
 		}
 	}
+
 	if req.About != nil {
 		setClauses = append(setClauses, fmt.Sprintf("about = $%d", argIndex))
 		if *req.About == "" {
@@ -607,6 +662,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 	var (
 		updatedUser    models.User
 		avatarField    sql.NullString
+		positionField  sql.NullString
 		birthDateField sql.NullTime
 		aboutField     sql.NullString
 	)
@@ -616,7 +672,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		&updatedUser.FullName,
 		&avatarField,
 		&updatedUser.Email,
-		&updatedUser.Position,
+		&positionField,
 		&birthDateField,
 		&aboutField,
 		&updatedUser.CreatedAt,
@@ -629,10 +685,19 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 	if avatarField.Valid {
 		updatedUser.AvatarURL = &avatarField.String
 	}
+
+	if positionField.Valid {
+		p := positionField.String
+		updatedUser.Position = &p
+	} else {
+		updatedUser.Position = nil
+	}
+
 	if birthDateField.Valid {
 		bd := birthDateField.Time.Format("02.01.2006")
 		updatedUser.BirthDate = &bd
 	}
+
 	if aboutField.Valid {
 		about := aboutField.String
 		updatedUser.About = &about
