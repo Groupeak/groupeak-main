@@ -25,7 +25,9 @@ fun MainRoot(
 
     // Детальные экраны должны подсвечивать вкладку "Аккаунт"
     val selectedRoute = when (currentRoute) {
-        Screen.ChangeEmail.route, Screen.ChangePassword.route -> Screen.Account.route
+        Screen.ChangeEmail.route,
+        Screen.ChangePassword.route -> Screen.Account.route
+        // Добавь другие детальные экраны, если появятся
         else -> currentRoute
     }
 

@@ -1,7 +1,6 @@
 package com.example.groupeak.ui.theme
 
 import androidx.compose.ui.graphics.Color
-import com.example.groupeak.ui.navigation.Screen
 
 val Purple80 = Color(0xFFD0BCFF)
 val PurpleGrey80 = Color(0xFFCCC2DC)
@@ -40,3 +39,5 @@ val Cyan = Color(0xFF65C1E5)
 val Black = Color(0xFF000000)
 
 val NotificationsGray = Color(0xFF969696)
+
+val NavButtonActive = Color(0xFF0055FF)

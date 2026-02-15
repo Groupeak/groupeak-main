@@ -9,13 +9,20 @@ import androidx.navigation.compose.composable
 import com.example.groupeak.ui.screens.account.AccountScreen
 import com.example.groupeak.ui.screens.account.AccountViewModel
 import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
+import com.example.groupeak.ui.screens.change_email.ChangeEmailUiState
+import com.example.groupeak.ui.screens.change_email.ChangeEmailViewModel
 import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
+import com.example.groupeak.ui.screens.change_password.ChangePasswordUiState
+import com.example.groupeak.ui.screens.change_password.ChangePasswordViewModel
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
 import com.example.groupeak.ui.navigation.Screen.*
-
+// временно для заглушек
+import androidx.compose.material3.Text
+import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.padding
 @Composable
 fun MainNavGraph(
     navController: NavHostController,
@@ -24,10 +31,10 @@ fun MainNavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Account.route,
+        startDestination = Screen.Account.route,
         modifier = modifier
     ) {
-        composable(Account.route) {
+        composable(Screen.Account.route) {
             val vm: AccountViewModel = viewModel()
             val state = vm.uiState
 
@@ -42,7 +49,7 @@ fun MainNavGraph(
             )
         }
 
-        composable(Profile.route) {
+        composable(Screen.Profile.route) {
             val vm: ProfileViewModel = viewModel()
             val state = vm.uiState
 
@@ -61,19 +68,49 @@ fun MainNavGraph(
             )
         }
 
-        composable(Feedback.route) {
-            FeedbackScreen(
-                onBack = { navController.popBackStack() },
-                onNotificationsClick = { navController.navigate(Notifications.route) }
+        composable(Screen.Feedback.route) {
+            FeedbackScreen(onBack = { navController.popBackStack() })
+        }
+
+        composable(Screen.ChangeEmail.route) {
+            val viewModel: ChangeEmailViewModel = viewModel()
+            val uiState = viewModel.uiState
+
+            ChangeEmailScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onNewEmailChange = viewModel::onNewEmailChange,
+                onPasswordChange = viewModel::onPasswordChange,
+                onChangeClick = { /* ничего не делаем */ },
+                onTogglePasswordVisibility = viewModel::togglePasswordVisibility,
+                onNotificationsClick = {  navController.navigate(Notifications.route) }
             )
         }
 
-        composable(ChangeEmail.route) {
-            ChangeEmailScreen(onBack = { navController.popBackStack() })
+        composable(Screen.ChangePassword.route) {
+            val viewModel: ChangePasswordViewModel = viewModel()
+            val uiState = viewModel.uiState
+
+            ChangePasswordScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onOldPasswordChange = viewModel::onOldPasswordChange,
+                onNewPasswordChange = viewModel::onNewPasswordChange,
+                onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
+                onChangeClick = { /* ничего не делаем */ },
+                onToggleOldPasswordVisibility = viewModel::toggleOldPasswordVisibility,
+                onToggleNewPasswordVisibility = viewModel::toggleNewPasswordVisibility,
+                onToggleConfirmPasswordVisibility = viewModel::toggleConfirmPasswordVisibility,
+                onNotificationsClick = {  navController.navigate(Notifications.route) }
+            )
         }
 
-        composable(ChangePassword.route) {
-            ChangePasswordScreen(onBack = { navController.popBackStack() })
+        composable(Screen.Tasks.route) {
+            Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
+        }
+
+        composable(Screen.Calendar.route) {
+            Text("Календарь — заглушка", modifier = Modifier.padding(16.dp))
         }
 
         composable(Notifications.route) {

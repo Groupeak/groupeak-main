@@ -4,6 +4,8 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
@@ -75,106 +77,125 @@ fun NotificationInviteDialog(
         properties = DialogProperties(usePlatformDefaultWidth = false)
     ) {
 
-        // 🔥 Фиксируем диалог сверху
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(top = 120.dp), // отступ сверху (можешь изменить)
-            contentAlignment = Alignment.TopCenter
+            modifier = Modifier.fillMaxSize()
         ) {
 
-            Column(
+            // 🔹 Затемнённый фон (клик закрывает диалог)
+            Box(
                 modifier = Modifier
-                    .width(340.dp) // точная ширина по макету
-                    .background(White, RoundedCornerShape(24.dp))
-                    .animateContentSize(
-                        animationSpec = spring(
-                            dampingRatio = 0.85f,
-                            stiffness = 300f
-                        )
-                    )
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.3f))
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        onDismiss()
+                    }
+            )
+
+            // 🔹 Сам диалог
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 120.dp),
+                contentAlignment = Alignment.TopCenter
             ) {
 
-                NotificationCard {
-
-                    InfoField(
-                        label = "Проект",
-                        value = notification.project,
-                        icon = R.drawable.ic_project
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    InfoField(
-                        label = "Должность",
-                        value = notification.role ?: "",
-                        icon = R.drawable.ic_role
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    DescriptionBlock(
-                        title = "Описание проекта",
-                        text = notification.description
-                    )
-
-                    Spacer(Modifier.height(20.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Button(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp),
-                            onClick = {
-                                messageKind = 0
-                                messagePulse += 1
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF3988FE),
-                                contentColor = Color.White
-                            ),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Text("Принять", fontSize = 14.sp)
-                        }
-
-                        OutlinedButton(
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(32.dp),
-                            onClick = {
-                                messageKind = 1
-                                messagePulse += 1
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(
-                                contentColor = Color(0xFF3988FE)
-                            ),
-                            border = BorderStroke(1.dp, Color(0xFF3988FE)),
-                            shape = RoundedCornerShape(18.dp)
-                        ) {
-                            Text("Отклонить", fontSize = 14.sp)
-                        }
-                    }
-
-                    if (showMessage) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(top = 12.dp)
-                                .offset(y = messageSlide)
-                                .graphicsLayer { alpha = messageAlpha },
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = messageText,
-                                fontSize = 14.sp,
-                                fontFamily = OnestFontFamily,
-                                color = messageColor,
-                                maxLines = 1
+                Column(
+                    modifier = Modifier
+                        .width(340.dp)
+                        .background(White, RoundedCornerShape(24.dp))
+                        .animateContentSize(
+                            animationSpec = spring(
+                                dampingRatio = 0.85f,
+                                stiffness = 300f
                             )
+                        )
+                ) {
+
+                    NotificationCard {
+
+                        InfoField(
+                            label = "Проект",
+                            value = notification.project,
+                            icon = R.drawable.ic_project
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        InfoField(
+                            label = "Должность",
+                            value = notification.role ?: "",
+                            icon = R.drawable.ic_role
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        DescriptionBlock(
+                            title = "Описание проекта",
+                            text = notification.description
+                        )
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+
+                            Button(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(32.dp),
+                                onClick = {
+                                    messageKind = 0
+                                    messagePulse += 1
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF3988FE),
+                                    contentColor = Color.White
+                                ),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text("Принять", fontSize = 14.sp)
+                            }
+
+                            OutlinedButton(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(32.dp),
+                                onClick = {
+                                    messageKind = 1
+                                    messagePulse += 1
+                                },
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    contentColor = Color(0xFF3988FE)
+                                ),
+                                border = BorderStroke(1.dp, Color(0xFF3988FE)),
+                                shape = RoundedCornerShape(18.dp)
+                            ) {
+                                Text("Отклонить", fontSize = 14.sp)
+                            }
+                        }
+
+                        if (showMessage) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(top = 12.dp)
+                                    .offset(y = messageSlide)
+                                    .graphicsLayer { alpha = messageAlpha },
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = messageText,
+                                    fontSize = 14.sp,
+                                    fontFamily = OnestFontFamily,
+                                    color = messageColor,
+                                    maxLines = 1
+                                )
+                            }
                         }
                     }
                 }
