@@ -12,12 +12,11 @@ import androidx.navigation.navigation
 import com.example.groupeak.service_locator.ServiceLocator
 import com.example.groupeak.ui.screens.login.LoginScreen
 import com.example.groupeak.ui.screens.login.LoginViewModel
+import com.example.groupeak.ui.screens.main.MainRoot
 import com.example.groupeak.ui.screens.register.RegisterScreen
 import com.example.groupeak.ui.screens.register.RegisterViewModel
 import com.example.groupeak.ui.screens.start.StartScreen
-import com.example.groupeak.ui.screens.main.MainRoot
 
-// Factory как у тебя было
 class RegisterViewModelFactory : ViewModelProvider.Factory {
     override fun <T : ViewModel> create(modelClass: Class<T>): T {
         if (modelClass.isAssignableFrom(RegisterViewModel::class.java)) {
@@ -46,10 +45,10 @@ fun RootNavGraph(rootNavController: NavHostController) {
     ) {
         authGraph(rootNavController)
 
-        // MAIN — это один composable, внутри которого уже свой nav + bottomBar
         composable(Graph.MAIN) {
             MainRoot(
                 onLogout = {
+                    ServiceLocator.sessionManager.clear()
                     rootNavController.navigate(Graph.AUTH) {
                         popUpTo(Graph.MAIN) { inclusive = true }
                         launchSingleTop = true
@@ -83,10 +82,9 @@ private fun NavGraphBuilder.authGraph(rootNavController: NavHostController) {
                 onEmailChange = loginViewModel::onEmailChange,
                 onPasswordChange = loginViewModel::onPasswordChange,
                 onLoginClick = {
-                    // ВАЖНО: возвращаем реальный логин через VM
                     loginViewModel.onLoginClick {
                         rootNavController.navigate(Graph.MAIN) {
-                            popUpTo(Graph.AUTH) { inclusive = true } // чтобы назад не вернуло на Login
+                            popUpTo(Graph.AUTH) { inclusive = true }
                             launchSingleTop = true
                         }
                     }

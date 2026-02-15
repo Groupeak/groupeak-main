@@ -1,15 +1,17 @@
-// app/src/main/java/com/example/groupeak/ui/screens/change_password/ChangePasswordViewModel.kt
 package com.example.groupeak.ui.screens.change_password
 
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.example.groupeak.domain.repository.UserRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.lifecycle.viewModelScope
 
-class ChangePasswordViewModel : ViewModel() {
+class ChangePasswordViewModel(
+    private val userRepository: UserRepository,
+) : ViewModel() {
 
     var uiState by mutableStateOf(ChangePasswordUiState())
         private set
@@ -47,15 +49,42 @@ class ChangePasswordViewModel : ViewModel() {
 
         if (hasError) return
 
+        val state = uiState
+
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
-            delay(800)
-            uiState = uiState.copy(
-                isLoading = false,
-                isSuccess = true
+
+            val result = userRepository.changePassword(
+                oldPassword = state.oldPassword,
+                newPassword = state.newPassword,
+                confirmNew = state.confirmPassword,
             )
-            delay(2000)
-            uiState = uiState.copy(isSuccess = false) // ← сброс после 2 сек
+
+            uiState = uiState.copy(isLoading = false)
+
+            result.onSuccess {
+                uiState = uiState.copy(
+                    oldPassword = "",
+                    newPassword = "",
+                    confirmPassword = "",
+                    isSuccess = true,
+                    oldPasswordError = null,
+                    newPasswordError = null,
+                    confirmPasswordError = null,
+                )
+                delay(2000)
+                uiState = uiState.copy(isSuccess = false)
+            }.onFailure { e ->
+                val msg = e.message.orEmpty()
+                uiState = when {
+                    msg.contains("invalid credentials", ignoreCase = true) -> {
+                        uiState.copy(oldPasswordError = "Неверный старый пароль")
+                    }
+                    else -> {
+                        uiState.copy(newPasswordError = msg.ifBlank { "Ошибка" })
+                    }
+                }
+            }
         }
     }
 
