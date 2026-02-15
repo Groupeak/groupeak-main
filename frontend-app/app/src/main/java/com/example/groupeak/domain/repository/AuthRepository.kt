@@ -8,7 +8,7 @@ interface AuthRepository {
         fullName: String,
         email: String,
         password: String,
-        position: String,
+        position: String?,
         avatarUrl: String? = null,
     ): Result<AuthResponse>
 

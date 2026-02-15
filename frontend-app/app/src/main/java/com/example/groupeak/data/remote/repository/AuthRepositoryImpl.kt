@@ -1,36 +1,40 @@
 package com.example.groupeak.data.remote.repository
 
+import com.example.groupeak.data.local.SessionManager
 import com.example.groupeak.data.remote.api.AuthApi
 import com.example.groupeak.data.remote.dto.AuthResponse
 import com.example.groupeak.data.remote.dto.LoginRequest
 import com.example.groupeak.data.remote.dto.RegisterRequest
-import com.example.groupeak.domain.repository.AuthRepository
-
 import com.example.groupeak.data.remote.errors.parseApiError
+import com.example.groupeak.domain.repository.AuthRepository
 
 class AuthRepositoryImpl(
     private val api: AuthApi,
+    private val sessionManager: SessionManager,
 ) : AuthRepository {
 
     override suspend fun register(
         fullName: String,
         email: String,
         password: String,
-        position: String,
+        position: String?,
         avatarUrl: String?,
     ): Result<AuthResponse> {
         return try {
-            Result.success(
-                api.register(
-                    RegisterRequest(
-                        fullName = fullName,
-                        email = email,
-                        password = password,
-                        position = position,
-                        avatarUrl = avatarUrl,
-                    )
+            val resp = api.register(
+                RegisterRequest(
+                    fullName = fullName,
+                    email = email,
+                    password = password,
+                    position = position,
+                    avatarUrl = avatarUrl,
                 )
             )
+
+            sessionManager.saveToken(resp.token)
+            sessionManager.updateUser(resp.user)
+
+            Result.success(resp)
         } catch (e: Throwable) {
             Result.failure(parseApiError(e))
         }
@@ -41,17 +45,19 @@ class AuthRepositoryImpl(
         password: String,
     ): Result<AuthResponse> {
         return try {
-            Result.success(
-                api.login(
-                    LoginRequest(
-                        email = email,
-                        password = password,
-                    )
+            val resp = api.login(
+                LoginRequest(
+                    email = email,
+                    password = password,
                 )
             )
+
+            sessionManager.saveToken(resp.token)
+            sessionManager.updateUser(resp.user)
+
+            Result.success(resp)
         } catch (e: Throwable) {
             Result.failure(parseApiError(e))
         }
     }
 }
-
