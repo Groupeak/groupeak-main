@@ -23,6 +23,7 @@ var (
 	ErrInviteEmailMismatch   = errors.New("invite email does not match user email")
 	ErrInviteTokenRequired   = errors.New("invite token is required")
 	ErrProjectNameIsRequired = errors.New("project name is required")
+	ErrNoFieldsToUpdate      = errors.New("no fields to update")
 )
 
 type ProjectService struct {
@@ -125,6 +126,104 @@ func (s *ProjectService) CreateProject(ctx context.Context, ownerID int64, req m
 	}
 
 	return &project, nil
+}
+
+// UpdateProject — частичное обновление проекта
+func (s *ProjectService) UpdateProject(ctx context.Context, ownerID, projectID int64, req models.PatchProjectRequest) (*models.Project, error) {
+	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	if !isOwner {
+		return nil, ErrNotProjectOwner
+	}
+
+	namePtr := req.Name
+	if namePtr == nil {
+		namePtr = req.ProjectName
+	}
+
+	setParts := make([]string, 0, 6)
+	args := make([]interface{}, 0, 6)
+	idx := 1
+	changed := false
+
+	if namePtr != nil {
+		name := strings.TrimSpace(*namePtr)
+		if name == "" {
+			return nil, ErrProjectNameIsRequired
+		}
+		setParts = append(setParts, fmt.Sprintf("name = $%d", idx))
+		args = append(args, name)
+		idx++
+		changed = true
+	}
+
+	if req.Description != nil {
+		d := strings.TrimSpace(*req.Description)
+		if d == "" {
+			setParts = append(setParts, "description = NULL")
+		} else {
+			setParts = append(setParts, fmt.Sprintf("description = $%d", idx))
+			args = append(args, d)
+			idx++
+		}
+		changed = true
+	}
+
+	if req.ClearDeadlineAt {
+		setParts = append(setParts, "deadline_at = NULL")
+		changed = true
+	} else if req.DeadlineAt != nil {
+		setParts = append(setParts, fmt.Sprintf("deadline_at = $%d", idx))
+		args = append(args, *req.DeadlineAt)
+		idx++
+		changed = true
+	}
+
+	if !changed {
+		return nil, ErrNoFieldsToUpdate
+	}
+
+	setParts = append(setParts, "updated_at = NOW()")
+
+	args = append(args, projectID)
+	query := fmt.Sprintf(`
+		UPDATE projects
+		SET %s
+		WHERE id = $%d
+		RETURNING id, owner_id, name, description, deadline_at, created_at, updated_at;
+	`, strings.Join(setParts, ", "), idx)
+
+	var (
+		p             models.Project
+		descField     sql.NullString
+		deadlineField sql.NullTime
+	)
+
+	err = s.db.QueryRowContext(ctx, query, args...).Scan(
+		&p.ID,
+		&p.OwnerID,
+		&p.Name,
+		&descField,
+		&deadlineField,
+		&p.CreatedAt,
+		&p.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update project: %w", err)
+	}
+
+	if descField.Valid {
+		v := descField.String
+		p.Description = &v
+	}
+	if deadlineField.Valid {
+		v := deadlineField.Time
+		p.DeadlineAt = &v
+	}
+
+	return &p, nil
 }
 
 // ListUserProjects возвращает все проекты, где юзер — owner или member
@@ -301,16 +400,16 @@ func (s *ProjectService) ListProjectMembers(ctx context.Context, userID, project
 			pm.user_id,
 			pm.role,
 			pm.created_at,
-			u.full_name,
+			COALESCE(u.full_name, '') as full_name,
 			u.email,
-			u.position,
+			COALESCE(u.position, '') as position,
 			u.avatar_url
 		FROM project_members pm
 		JOIN users u ON u.id = pm.user_id
 		WHERE pm.project_id = $1
 		ORDER BY
 			CASE pm.role WHEN 'owner' THEN 0 ELSE 1 END,
-			u.full_name;
+			COALESCE(u.full_name, '');
 	`
 
 	rows, err := s.db.QueryContext(ctx, query, projectID)
