@@ -44,10 +44,12 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Post("/{projectID}/invites", projectHandler.InviteMember) // POST /api/v1/projects/{projectID}/invites
 				r.Get("/{projectID}/members", projectHandler.ListMembers)   // GET  /api/v1/projects/{projectID}/members
 				r.Post("/invites/accept", projectHandler.AcceptInvite)      // POST /api/v1/projects/invites/accept
+				r.Patch("/{projectID}", projectHandler.UpdateProject)       // PATCH /api/v1/projects/{projectID}
 
-				r.Post("/{projectID}/tasks", taskHandler.CreateTask)          // POST /api/v1/projects/{projectID}/tasks
-				r.Get("/{projectID}/tasks", taskHandler.ListTasks)            // GET  /api/v1/projects/{projectID}/tasks
-				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID) // GET  /api/v1/projects/{projectID}/tasks/{taskID}
+				r.Post("/{projectID}/tasks", taskHandler.CreateTask)           // POST /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks", taskHandler.ListTasks)             // GET  /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID)  // GET  /api/v1/projects/{projectID}/tasks/{taskID}
+				r.Patch("/{projectID}/tasks/{taskID}", taskHandler.UpdateTask) // PATCH /api/v1/projects/projectID/tasks/{taskID}
 			})
 
 			r.Route("/user", func(r chi.Router) {
