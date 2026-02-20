@@ -308,6 +308,245 @@ func (s *TaskService) GetProjectTaskByID(ctx context.Context, userID, projectID,
 	return t, nil
 }
 
+// UpdateTask — частичное обновление задачи
+func (s *TaskService) UpdateTask(ctx context.Context, ownerID, projectID, taskID int64, req models.PatchTaskRequest) (*models.Task, error) {
+	var dbOwnerID int64
+	err := s.db.QueryRowContext(ctx, `SELECT owner_id FROM projects WHERE id = $1`, projectID).Scan(&dbOwnerID)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select project owner: %w", err)
+	}
+	if dbOwnerID != ownerID {
+		return nil, ErrNotProjectOwner
+	}
+
+	var taskProjectID int64
+	err = s.db.QueryRowContext(ctx, `SELECT project_id FROM tasks WHERE id = $1`, taskID).Scan(&taskProjectID)
+	if err == sql.ErrNoRows {
+		return nil, ErrTaskNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("select task project: %w", err)
+	}
+	if taskProjectID != projectID {
+		return nil, ErrTaskNotFound
+	}
+
+	titlePtr := req.Title
+	if titlePtr == nil {
+		titlePtr = req.TaskName
+	}
+	descPtr := req.Description
+	if descPtr == nil {
+		descPtr = req.TaskDescription
+	}
+	duePtr := req.DueAt
+	if duePtr == nil {
+		duePtr = req.DueDate
+	}
+
+	setParts := make([]string, 0, 10)
+	args := make([]interface{}, 0, 10)
+	idx := 1
+	changed := false
+
+	if titlePtr != nil {
+		title := strings.TrimSpace(*titlePtr)
+		if title == "" {
+			return nil, ErrTaskTitleRequired
+		}
+		setParts = append(setParts, fmt.Sprintf("title = $%d", idx))
+		args = append(args, title)
+		idx++
+		changed = true
+	}
+
+	if descPtr != nil {
+		d := strings.TrimSpace(*descPtr)
+		if d == "" {
+			setParts = append(setParts, "description = NULL")
+		} else {
+			setParts = append(setParts, fmt.Sprintf("description = $%d", idx))
+			args = append(args, d)
+			idx++
+		}
+		changed = true
+	}
+
+	if req.Comments != nil {
+		c := strings.TrimSpace(*req.Comments)
+		if c == "" {
+			setParts = append(setParts, "comments = NULL")
+		} else {
+			setParts = append(setParts, fmt.Sprintf("comments = $%d", idx))
+			args = append(args, c)
+			idx++
+		}
+		changed = true
+	}
+
+	if req.Status != nil {
+		sv := *req.Status
+		switch sv {
+		case models.TaskStatusTodo, models.TaskStatusInProgress, models.TaskStatusDone, models.TaskStatusPostponed:
+		default:
+			return nil, ErrInvalidTaskStatusValue
+		}
+		setParts = append(setParts, fmt.Sprintf("status = $%d", idx))
+		args = append(args, sv)
+		idx++
+		changed = true
+	}
+
+	if req.Priority != nil {
+		pv := *req.Priority
+		switch pv {
+		case models.TaskPriorityLow, models.TaskPriorityMedium, models.TaskPriorityHigh:
+		default:
+			return nil, ErrInvalidTaskPriority
+		}
+		setParts = append(setParts, fmt.Sprintf("priority = $%d", idx))
+		args = append(args, pv)
+		idx++
+		changed = true
+	}
+
+	if req.ClearAssigneeID {
+		setParts = append(setParts, "assignee_id = NULL")
+		changed = true
+	} else if req.AssigneeID != nil {
+		if *req.AssigneeID <= 0 {
+			return nil, ErrInvalidAssigneeIDs
+		}
+		id := *req.AssigneeID
+		if err := s.ensureUsersExist(ctx, []int64{id}); err != nil {
+			return nil, err
+		}
+		if err := s.ensureUsersAreProjectMembers(ctx, projectID, []int64{id}); err != nil {
+			return nil, err
+		}
+		setParts = append(setParts, fmt.Sprintf("assignee_id = $%d", idx))
+		args = append(args, id)
+		idx++
+		changed = true
+	}
+
+	if req.ClearDueAt {
+		setParts = append(setParts, "due_at = NULL")
+		changed = true
+	} else if duePtr != nil {
+		setParts = append(setParts, fmt.Sprintf("due_at = $%d", idx))
+		args = append(args, *duePtr)
+		idx++
+		changed = true
+	}
+
+	var newAssignees []int64
+	if req.AssigneeIDs != nil {
+		newAssignees, err = normalizeAssigneeIDs64(*req.AssigneeIDs)
+		if err != nil {
+			return nil, err
+		}
+		if len(newAssignees) > 0 {
+			if err := s.ensureUsersExist(ctx, newAssignees); err != nil {
+				return nil, err
+			}
+			if err := s.ensureUsersAreProjectMembers(ctx, projectID, newAssignees); err != nil {
+				return nil, err
+			}
+		}
+		changed = true
+	}
+
+	if !changed {
+		return nil, ErrNoFieldsToUpdate
+	}
+
+	setParts = append(setParts, "updated_at = NOW()")
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	args = append(args, taskID)
+	query := fmt.Sprintf(`
+		UPDATE tasks
+		SET %s
+		WHERE id = $%d
+		RETURNING id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at;
+	`, strings.Join(setParts, ", "), idx)
+
+	var (
+		t             models.Task
+		descField     sql.NullString
+		commentsField sql.NullString
+		assigneeField sql.NullInt64
+		dueField      sql.NullTime
+	)
+
+	err = tx.QueryRowContext(ctx, query, args...).Scan(
+		&t.ID,
+		&t.ProjectID,
+		&t.Title,
+		&descField,
+		&commentsField,
+		&t.Status,
+		&t.Priority,
+		&assigneeField,
+		&dueField,
+		&t.CreatedAt,
+		&t.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("update task: %w", err)
+	}
+
+	if descField.Valid {
+		v := descField.String
+		t.Description = &v
+	}
+	if commentsField.Valid {
+		v := commentsField.String
+		t.Comments = &v
+	}
+	if assigneeField.Valid {
+		v := assigneeField.Int64
+		t.AssigneeID = &v
+	}
+	if dueField.Valid {
+		v := dueField.Time
+		t.DueAt = &v
+	}
+
+	if req.AssigneeIDs != nil {
+		_, err = tx.ExecContext(ctx, `DELETE FROM task_assignees WHERE task_id = $1`, taskID)
+		if err != nil {
+			return nil, fmt.Errorf("delete task_assignees: %w", err)
+		}
+		for _, uid := range newAssignees {
+			_, err = tx.ExecContext(
+				ctx,
+				`INSERT INTO task_assignees (task_id, user_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+				taskID,
+				uid,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("insert task_assignees: %w", err)
+			}
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit: %w", err)
+	}
+
+	return s.getTaskByID(ctx, taskID)
+}
+
 // ensureProjectExists — чтобы отличать "проекта нет" от "ты не участник"
 func (s *TaskService) ensureProjectExists(ctx context.Context, projectID int64) error {
 	var id int64
@@ -580,6 +819,28 @@ func normalizeAssigneeIDs(ids []int) ([]int64, error) {
 		}
 		seen[id] = struct{}{}
 		out = append(out, id)
+	}
+
+	return out, nil
+}
+
+func normalizeAssigneeIDs64(ids []int64) ([]int64, error) {
+	if len(ids) == 0 {
+		return []int64{}, nil
+	}
+
+	seen := make(map[int64]struct{}, len(ids))
+	out := make([]int64, 0, len(ids))
+
+	for _, v := range ids {
+		if v <= 0 {
+			return nil, ErrInvalidAssigneeIDs
+		}
+		if _, ok := seen[v]; ok {
+			continue
+		}
+		seen[v] = struct{}{}
+		out = append(out, v)
 	}
 
 	return out, nil
