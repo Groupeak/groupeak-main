@@ -147,3 +147,55 @@ func (h *TaskHandler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 		"task": task,
 	})
 }
+
+// PATCH /api/v1/projects/{projectID}/tasks/{taskID}
+func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, err := parseIDParam(r, "projectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	taskID, err := parseIDParam(r, "taskID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid taskID")
+		return
+	}
+
+	var req models.PatchTaskRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	task, err := h.taskService.UpdateTask(r.Context(), userID, projectID, taskID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectOwner):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, services.ErrTaskNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrTaskTitleRequired),
+			errors.Is(err, services.ErrInvalidTaskPriority),
+			errors.Is(err, services.ErrInvalidTaskStatusValue),
+			errors.Is(err, services.ErrInvalidAssigneeIDs),
+			errors.Is(err, services.ErrAssigneeNotFound),
+			errors.Is(err, services.ErrAssigneesNotInProject),
+			errors.Is(err, services.ErrNoFieldsToUpdate):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"task": task})
+}
