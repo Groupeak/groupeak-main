@@ -180,3 +180,42 @@ func (h *ProjectHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"invite": invite})
 }
+
+// PATCH /api/v1/projects/{projectID}
+func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, ok := parseProjectID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	var req models.PatchProjectRequest
+	if err := decodeJSON(w, r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	project, err := h.projectService.UpdateProject(r.Context(), userID, projectID, req)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectOwner):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, services.ErrProjectNameIsRequired),
+			errors.Is(err, services.ErrNoFieldsToUpdate):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+}
