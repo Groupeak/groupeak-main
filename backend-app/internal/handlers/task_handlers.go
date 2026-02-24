@@ -199,3 +199,41 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, map[string]interface{}{"task": task})
 }
+
+// DELETE /api/v1/projects/{projectID}/tasks/{taskID}
+func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, err := parseIDParam(r, "projectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	taskID, err := parseIDParam(r, "taskID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid taskID")
+		return
+	}
+
+	err = h.taskService.DeleteTask(r.Context(), userID, projectID, taskID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrTaskNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectMember):
+			writeError(w, http.StatusForbidden, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
