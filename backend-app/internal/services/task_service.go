@@ -544,7 +544,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, ownerID, projectID, taskID
 		return nil, fmt.Errorf("commit: %w", err)
 	}
 
-	return s.getTaskByID(ctx, taskID)
+	t.AssigneeIDs = newAssignees
+	if t.AssigneeIDs == nil {
+		t.AssigneeIDs = []int64{}
+	}
+
+	return &t, nil
 }
 
 // ensureProjectExists — чтобы отличать "проекта нет" от "ты не участник"
@@ -927,4 +932,120 @@ func makePlaceholders(start, count int) string {
 		b.WriteString(strconv.Itoa(start + i))
 	}
 	return b.String()
+}
+
+// DeleteTask удаляет задачу и все связанные данные
+func (s *TaskService) DeleteTask(ctx context.Context, userID, projectID, taskID int64) error {
+	var taskProjectID int64
+	var taskAssigneeID sql.NullInt64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT project_id, assignee_id FROM tasks WHERE id = $1`,
+		taskID,
+	).Scan(&taskProjectID, &taskAssigneeID)
+
+	if err == sql.ErrNoRows {
+		return ErrTaskNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("query task: %w", err)
+	}
+
+	if taskProjectID != projectID {
+		return ErrTaskNotFound
+	}
+
+	isOwner, err := s.isProjectOwner(ctx, projectID, userID)
+	if err != nil {
+		return err
+	}
+
+	isAssignee := false
+	if taskAssigneeID.Valid && taskAssigneeID.Int64 == userID {
+		isAssignee = true
+	}
+
+	if !isOwner && !isAssignee {
+		isMember, err := s.isProjectMember(ctx, projectID, userID)
+		if err != nil {
+			return err
+		}
+		if !isMember {
+			return ErrNotProjectMember
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM notifications WHERE task_id = $1`,
+		taskID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete notifications: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM task_assignees WHERE task_id = $1`,
+		taskID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete task assignees: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM tasks WHERE id = $1`,
+		taskID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete task: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
+
+// isProjectOwner проверяет, является ли пользователь владельцем проекта
+func (s *TaskService) isProjectOwner(ctx context.Context, projectID, userID int64) (bool, error) {
+	var ownerID int64
+	err := s.db.QueryRowContext(ctx,
+		`SELECT owner_id FROM projects WHERE id = $1`,
+		projectID,
+	).Scan(&ownerID)
+
+	if err == sql.ErrNoRows {
+		return false, ErrProjectNotFound
+	}
+	if err != nil {
+		return false, fmt.Errorf("query project owner: %w", err)
+	}
+
+	return ownerID == userID, nil
+}
+
+// isProjectMember проверяет, является ли пользователь участником проекта
+func (s *TaskService) isProjectMember(ctx context.Context, projectID, userID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx,
+		`SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2)`,
+		projectID,
+		userID,
+	).Scan(&exists)
+
+	if err != nil {
+		return false, fmt.Errorf("check project member: %w", err)
+	}
+
+	return exists, nil
 }
