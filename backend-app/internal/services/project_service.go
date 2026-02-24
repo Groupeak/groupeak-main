@@ -645,3 +645,71 @@ func generateInviteToken() (string, error) {
 	}
 	return hex.EncodeToString(buf), nil
 }
+
+// DeleteProject удаляет проект и все связанные данные
+func (s *ProjectService) DeleteProject(ctx context.Context, ownerID, projectID int64) error {
+	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
+	if err != nil {
+		return err
+	}
+	if !isOwner {
+		return ErrNotProjectOwner
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM notifications WHERE project_id = $1`,
+		projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete notifications: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM project_calendar WHERE project_id = $1`,
+		projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete calendar events: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM project_members WHERE project_id = $1`,
+		projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete project members: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM project_invites WHERE project_id = $1`,
+		projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete project invites: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx,
+		`DELETE FROM projects WHERE id = $1`,
+		projectID,
+	)
+	if err != nil {
+		return fmt.Errorf("delete project: %w", err)
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
+}
