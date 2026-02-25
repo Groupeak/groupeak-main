@@ -75,18 +75,20 @@ fun NotificationInviteDialog(
 
     Dialog(
         onDismissRequest = { onDismiss() },
-        properties = DialogProperties(usePlatformDefaultWidth = false)
+        properties = DialogProperties(usePlatformDefaultWidth = false),
+
     ) {
 
         Box(
-            modifier = Modifier.fillMaxSize()
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
         ) {
 
             // 🔹 Затемнённый фон (клик закрывает диалог)
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.3f))
+                    .background(Color.Black.copy(alpha = 0.1f))
                     .clickable(
                         indication = null,
                         interactionSource = remember { MutableInteractionSource() }

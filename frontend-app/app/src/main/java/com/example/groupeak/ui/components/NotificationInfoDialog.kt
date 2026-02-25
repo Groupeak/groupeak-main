@@ -28,7 +28,8 @@ fun NotificationInfoDialog(
 ) {
     Dialog(onDismissRequest = onDismiss, properties = DialogProperties(
         usePlatformDefaultWidth = false
-    )) {
+    ),
+        ) {
         Column(
             modifier = Modifier
                 .widthIn(max = 340.dp)
