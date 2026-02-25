@@ -16,8 +16,9 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.navigation.Screen
 import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.NavButtonActive
+
 private data class BottomItem(
-    val route: String,
+    val route: String?,
     val label: String,
     val iconRes: Int
 )
@@ -25,17 +26,17 @@ private data class BottomItem(
 @Composable
 fun AppBottomBar(
     navController: NavHostController,
-    selectedRoute: String?
+    selectedRoute: String?,
+    onAddClick: () -> Unit
 ) {
     val items = listOf(
         BottomItem(Screen.Account.route, "Главная", R.drawable.ic_home_button),
-        BottomItem("tasks", "Задачи", R.drawable.ic_tasks_button),
-        BottomItem(Screen.Feedback.route, "Добавить", R.drawable.ic_add_button),
-        BottomItem("calendar", "Календарь", R.drawable.ic_calendar_button),
+        BottomItem(Screen.Tasks.route, "Задачи", R.drawable.ic_tasks_button),
+        BottomItem(null, "Добавить", R.drawable.ic_add_button),
+        BottomItem(Screen.Calendar.route, "Календарь", R.drawable.ic_calendar_button),
         BottomItem(Screen.Profile.route, "Профиль", R.drawable.ic_user_button)
     )
 
-    // Контейнер нижней панели
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -53,14 +54,15 @@ fun AppBottomBar(
             verticalAlignment = Alignment.Top
         ) {
             items.forEach { item ->
-                val isSelected = selectedRoute == item.route
+                val isSelected = item.route != null && selectedRoute == item.route
 
                 Box(
                     modifier = Modifier
                         .size(32.dp)
                         .clickable {
-                            if (!isSelected) {
-                                navController.navigate(item.route) {
+                            when {
+                                item.route == null -> onAddClick()
+                                !isSelected -> navController.navigate(item.route) {
                                     popUpTo(navController.graph.startDestinationId)
                                     launchSingleTop = true
                                 }
