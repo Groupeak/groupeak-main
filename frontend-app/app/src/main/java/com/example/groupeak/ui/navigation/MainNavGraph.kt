@@ -1,28 +1,30 @@
 package com.example.groupeak.ui.navigation
 
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import com.example.groupeak.service_locator.ServiceLocator
 import com.example.groupeak.ui.screens.account.AccountScreen
 import com.example.groupeak.ui.screens.account.AccountViewModel
 import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
-import com.example.groupeak.ui.screens.change_email.ChangeEmailUiState
 import com.example.groupeak.ui.screens.change_email.ChangeEmailViewModel
 import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
-import com.example.groupeak.ui.screens.change_password.ChangePasswordUiState
 import com.example.groupeak.ui.screens.change_password.ChangePasswordViewModel
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
-import com.example.groupeak.ui.navigation.Screen.*
-// временно для заглушек
-import androidx.compose.material3.Text
-import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.padding
+
 @Composable
 fun MainNavGraph(
     navController: NavHostController,
@@ -35,22 +37,50 @@ fun MainNavGraph(
         modifier = modifier
     ) {
         composable(Screen.Account.route) {
-            val vm: AccountViewModel = viewModel()
+            val vm: AccountViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return AccountViewModel(
+                                ServiceLocator.userRepository,
+                                ServiceLocator.sessionManager,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+
             val state = vm.uiState
 
             AccountScreen(
                 uiState = state,
-                onProfileClick = { navController.navigate(Profile.route) },
-                onContactClick = { navController.navigate(Feedback.route) },
-                onChangeEmailClick = { navController.navigate(ChangeEmail.route) },
-                onChangePasswordClick = { navController.navigate(ChangePassword.route) },
-                onNotificationsClick = { navController.navigate(Notifications.route) },
+                onProfileClick = { navController.navigate(Screen.Profile.route) },
+                onContactClick = { navController.navigate(Screen.Feedback.route) },
+                onChangeEmailClick = { navController.navigate(Screen.ChangeEmail.route) },
+                onChangePasswordClick = { navController.navigate(Screen.ChangePassword.route) },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
                 onLogoutClick = onLogout
             )
         }
 
         composable(Screen.Profile.route) {
-            val vm: ProfileViewModel = viewModel()
+            val vm: ProfileViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(ProfileViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return ProfileViewModel(
+                                ServiceLocator.userRepository,
+                                ServiceLocator.sessionManager,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+
             val state = vm.uiState
 
             ProfileScreen(
@@ -59,7 +89,7 @@ fun MainNavGraph(
                 onEditClick = vm::onEditClick,
                 onSaveClick = vm::onSaveClick,
                 onCancelEdit = vm::onCancelEdit,
-                onNotificationsClick = { navController.navigate(Notifications.route) },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
                 onPositionClick = { /* TODO */ },
                 onFullNameChange = vm::onFullNameChange,
                 onBirthDateChange = vm::onBirthDateChange,
@@ -69,42 +99,76 @@ fun MainNavGraph(
         }
 
         composable(Screen.Feedback.route) {
-            FeedbackScreen(onBack = { navController.popBackStack() })
+            val user by ServiceLocator.sessionManager.user.collectAsState()
+
+            FeedbackScreen(
+                onBack = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                senderEmail = user?.email.orEmpty(),
+            )
         }
 
         composable(Screen.ChangeEmail.route) {
-            val viewModel: ChangeEmailViewModel = viewModel()
-            val uiState = viewModel.uiState
+            val vm: ChangeEmailViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(ChangeEmailViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return ChangeEmailViewModel(
+                                ServiceLocator.userRepository,
+                                ServiceLocator.sessionManager,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+
+            val uiState = vm.uiState
 
             ChangeEmailScreen(
                 uiState = uiState,
                 onBackClick = { navController.popBackStack() },
-                onNewEmailChange = viewModel::onNewEmailChange,
-                onPasswordChange = viewModel::onPasswordChange,
-                onChangeClick = { /* ничего не делаем */ },
-                onTogglePasswordVisibility = viewModel::togglePasswordVisibility,
-                onNotificationsClick = {  navController.navigate(Notifications.route) }
+                onNewEmailChange = vm::onNewEmailChange,
+                onPasswordChange = vm::onPasswordChange,
+                onChangeClick = vm::onChangeClick,
+                onTogglePasswordVisibility = vm::togglePasswordVisibility,
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
             )
         }
 
         composable(Screen.ChangePassword.route) {
-            val viewModel: ChangePasswordViewModel = viewModel()
-            val uiState = viewModel.uiState
+            val vm: ChangePasswordViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(ChangePasswordViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return ChangePasswordViewModel(
+                                ServiceLocator.userRepository,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+
+            val uiState = vm.uiState
 
             ChangePasswordScreen(
                 uiState = uiState,
                 onBackClick = { navController.popBackStack() },
-                onOldPasswordChange = viewModel::onOldPasswordChange,
-                onNewPasswordChange = viewModel::onNewPasswordChange,
-                onConfirmPasswordChange = viewModel::onConfirmPasswordChange,
-                onChangeClick = { /* ничего не делаем */ },
-                onToggleOldPasswordVisibility = viewModel::toggleOldPasswordVisibility,
-                onToggleNewPasswordVisibility = viewModel::toggleNewPasswordVisibility,
-                onToggleConfirmPasswordVisibility = viewModel::toggleConfirmPasswordVisibility,
-                onNotificationsClick = {  navController.navigate(Notifications.route) }
+                onOldPasswordChange = vm::onOldPasswordChange,
+                onNewPasswordChange = vm::onNewPasswordChange,
+                onConfirmPasswordChange = vm::onConfirmPasswordChange,
+                onChangeClick = vm::onChangeClick,
+                onToggleOldPasswordVisibility = vm::toggleOldPasswordVisibility,
+                onToggleNewPasswordVisibility = vm::toggleNewPasswordVisibility,
+                onToggleConfirmPasswordVisibility = vm::toggleConfirmPasswordVisibility,
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
             )
         }
 
+        // Заглушки
         composable(Screen.Tasks.route) {
             Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
         }
@@ -113,7 +177,8 @@ fun MainNavGraph(
             Text("Календарь — заглушка", modifier = Modifier.padding(16.dp))
         }
 
-        composable(Notifications.route) {
+        // Уведомления
+        composable(Screen.Notifications.route) {
             NotificationsScreen(
                 onBack = { navController.popBackStack() }
             )

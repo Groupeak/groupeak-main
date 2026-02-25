@@ -239,6 +239,12 @@ fun ChangePasswordScreen(
             var showMessageText by remember { mutableStateOf(false) }
             var messagePulse by remember { mutableIntStateOf(0) }
 
+            LaunchedEffect(uiState.isSuccess) {
+                if (uiState.isSuccess) {
+                    messagePulse += 1
+                }
+            }
+
             val animatedCardHeight by animateDpAsState(
                 targetValue = if (isExpanded) WhiteCardHeight + SentExtraHeight else WhiteCardHeight,
                 animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
@@ -321,7 +327,7 @@ fun ChangePasswordScreen(
                         .height(32.dp)
                         .align(Alignment.CenterHorizontally),
                     text = "Изменить",
-                    onClick = { messagePulse += 1 }, // ← триггер анимации
+                    onClick = { if (!uiState.isLoading) onChangeClick() },
                     fontSize = 14.sp
                 )
 

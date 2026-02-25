@@ -24,6 +24,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
@@ -38,6 +39,7 @@ import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.GroupeakDarkBlue
 import com.example.groupeak.ui.theme.GroupeakLightGray
 import com.example.groupeak.ui.theme.Gray650
+import com.example.groupeak.ui.theme.Gray70717A
 import com.example.groupeak.ui.theme.OnestFontFamily
 import kotlinx.coroutines.delay
 
@@ -196,6 +198,7 @@ fun FeedbackScreen(
                                 labelStartPadding = LabelStartPaddingFromCard,
                                 iconRes = R.drawable.ic_fio,
                                 value = senderEmail,
+                                valueColor = Gray70717A,
                                 onValueChange = { },
                                 placeholder = "for@example.com",
                                 readOnly = true,
@@ -349,6 +352,7 @@ private fun LabeledInputField(
     labelStartPadding: Dp,
     iconRes: Int,
     value: String,
+    valueColor: Color = GroupeakDarkBlue,
     onValueChange: (String) -> Unit,
     placeholder: String,
     readOnly: Boolean,
@@ -396,7 +400,7 @@ private fun LabeledInputField(
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     readOnly = readOnly,
-                    textStyle = FieldTextStyle,
+                    textStyle = FieldTextStyle.copy(color = valueColor),
                     decorationBox = { inner ->
                         if (value.isBlank()) {
                             Text(

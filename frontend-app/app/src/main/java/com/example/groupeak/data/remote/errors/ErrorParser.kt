@@ -9,17 +9,23 @@ fun parseApiError(throwable: Throwable): Throwable {
     return try {
         val errorBody = throwable.response()?.errorBody()?.string()
 
-        val message = if (!errorBody.isNullOrEmpty()) {
-            val json = JSONObject(errorBody)
-            json.optString("error")
-                .ifEmpty { json.optString("message") }
-                .ifEmpty { "Ошибка сервера (${throwable.code()})" }
-        } else {
-            "Ошибка сервера (${throwable.code()})"
+        if (errorBody.isNullOrEmpty()) {
+            return Exception("Ошибка сервера (${throwable.code()})")
         }
 
-        Exception(message)
-    } catch (e: Exception) {
+        // 1) Пытаемся распарсить JSON {error:"..."} / {message:"..."}
+        try {
+            val json = JSONObject(errorBody)
+            val message = json.optString("error")
+                .ifEmpty { json.optString("message") }
+                .ifEmpty { "Ошибка сервера (${throwable.code()})" }
+            Exception(message)
+        } catch (_: Exception) {
+            // 2) Если тело не JSON (например, http.Error на бэке) — показываем как текст
+            val trimmed = errorBody.trim()
+            if (trimmed.isNotEmpty()) Exception(trimmed) else Exception("Ошибка сервера (${throwable.code()})")
+        }
+    } catch (_: Exception) {
         Exception("Ошибка сервера (${throwable.code()})")
     }
 }

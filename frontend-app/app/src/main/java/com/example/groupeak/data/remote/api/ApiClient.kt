@@ -1,5 +1,6 @@
 package com.example.groupeak.data.remote.api
 
+import com.example.groupeak.data.local.SessionManager
 import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
@@ -7,17 +8,34 @@ import retrofit2.converter.gson.GsonConverterFactory
 object ApiClient {
     private const val BASE_URL = "http://10.0.2.2:3030/"
 
-    private val okHttpClient: OkHttpClient by lazy {
-        OkHttpClient.Builder()
-            .build()
-    }
+    private var isInitialized = false
 
-    val authApi: AuthApi by lazy {
-        Retrofit.Builder()
+    lateinit var authApi: AuthApi
+        private set
+
+    lateinit var userApi: UserApi
+        private set
+
+    fun init(sessionManager: SessionManager) {
+        val okHttpClient: OkHttpClient = OkHttpClient.Builder()
+            .addInterceptor(AuthInterceptor(sessionManager))
+            .build()
+
+        val retrofit: Retrofit = Retrofit.Builder()
             .baseUrl(BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
-            .create(AuthApi::class.java)
+
+        authApi = retrofit.create(AuthApi::class.java)
+        userApi = retrofit.create(UserApi::class.java)
+
+        isInitialized = true
+    }
+
+    fun checkInitialized() {
+        check(isInitialized) {
+            "ApiClient is not initialized. Call ServiceLocator.init(context) in MainActivity before using it."
+        }
     }
 }

@@ -9,7 +9,7 @@ data class RegisterRequest(
     @SerializedName("email") val email: String,
     @SerializedName("password") val password: String,
     // backend, frontend, uiux, pm
-    @SerializedName("position") val position: String,
+    @SerializedName("position") val position: String?,
     @SerializedName("avatar_url") val avatarUrl: String? = null,
 )
 
@@ -25,7 +25,9 @@ data class UserDto(
     @SerializedName("full_name") val fullName: String,
     @SerializedName("avatar_url") val avatarUrl: String?,
     @SerializedName("email") val email: String,
-    @SerializedName("position") val position: String,
+    @SerializedName("position") val position: String?,
+    @SerializedName("birth_date") val birthDate: String?,
+    @SerializedName("about") val about: String?,
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("updated_at") val updatedAt: String,
 )

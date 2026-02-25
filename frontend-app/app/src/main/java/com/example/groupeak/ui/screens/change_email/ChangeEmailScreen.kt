@@ -28,6 +28,7 @@ import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.GroupeakDarkBlue
 import com.example.groupeak.ui.theme.GroupeakLightGray
 import com.example.groupeak.ui.theme.Gray650
+import com.example.groupeak.ui.theme.Gray70717A
 import com.example.groupeak.ui.theme.OnestFontFamily
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -113,6 +114,7 @@ private fun LabeledField(
     label: String,
     iconRes: Int,
     value: String,
+    valueColor: Color = GroupeakDarkBlue,
     modifier: Modifier = Modifier
 ) {
     Column(modifier = modifier) {
@@ -152,7 +154,7 @@ private fun LabeledField(
                 fontSize = 14.sp,
                 fontFamily = OnestFontFamily,
                 fontWeight = FontWeight.Normal,
-                color = GroupeakDarkBlue,
+                color = valueColor,
                 maxLines = 1
             )
         }
@@ -357,6 +359,12 @@ fun ChangeEmailScreen(
             var showMessageText by remember { mutableStateOf(false) }
             var messagePulse by remember { mutableIntStateOf(0) }
 
+            LaunchedEffect(uiState.isSuccess) {
+                if (uiState.isSuccess) {
+                    messagePulse += 1
+                }
+            }
+
             val animatedCardHeight by animateDpAsState(
                 targetValue = if (isExpanded) WhiteCardHeight + SentExtraHeight else WhiteCardHeight,
                 animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
@@ -398,7 +406,8 @@ fun ChangeEmailScreen(
                 LabeledField(
                     label = "Текущая почта",
                     iconRes = R.drawable.ic_email,
-                    value = uiState.currentEmail
+                    value = uiState.currentEmail,
+                    valueColor = Gray70717A
                 )
 
                 Spacer(modifier = Modifier.height(11.dp))
@@ -416,7 +425,7 @@ fun ChangeEmailScreen(
                 Spacer(modifier = Modifier.height(11.dp))
 
                 LabeledPasswordField(
-                    label = "Подтверждение нового пароля",
+                    label = "Подтверждение изменений паролем",
                     value = uiState.password,
                     onValueChange = onPasswordChange,
                     isPasswordVisible = uiState.isPasswordVisible,
@@ -433,7 +442,7 @@ fun ChangeEmailScreen(
                         .height(32.dp)
                         .align(Alignment.CenterHorizontally),
                     text = "Изменить",
-                    onClick = { messagePulse += 1 }, // ← триггер анимации
+                    onClick = { if (!uiState.isLoading) onChangeClick() },
                     fontSize = 14.sp
                 )
 

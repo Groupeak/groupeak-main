@@ -67,7 +67,7 @@ class RegisterViewModel(
                 fullName = current.fio,
                 email = current.email,
                 password = current.password,
-                position = "frontend",
+                position = null,
                 avatarUrl = null
             )
 
