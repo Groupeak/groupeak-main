@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -145,14 +147,14 @@ fun NotificationInviteDialog(
                         Spacer(Modifier.height(20.dp))
 
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                             horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
 
                             Button(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(32.dp),
+                                    .height(32.dp)
+                                    .width(126.dp),
                                 onClick = {
                                     messageKind = 0
                                     messagePulse += 1
@@ -161,15 +163,24 @@ fun NotificationInviteDialog(
                                     containerColor = Color(0xFF3988FE),
                                     contentColor = Color.White
                                 ),
-                                shape = RoundedCornerShape(18.dp)
+                                shape = RoundedCornerShape(18.dp),
+                                contentPadding = PaddingValues(0.dp),
                             ) {
-                                Text("Принять", fontSize = 14.sp)
+                                Text(
+                                    text = "Принять",
+                                    fontSize = 14.sp,
+                                    fontFamily = OnestFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,        // ✅ Центрирование текста
+                                    modifier = Modifier.fillMaxWidth()   // ✅ Текст занимает всю ширину кнопки
+                                )
                             }
-
+                            Spacer(modifier = Modifier.width(12.dp));
                             OutlinedButton(
                                 modifier = Modifier
-                                    .weight(1f)
-                                    .height(32.dp),
+                                    .height(32.dp)
+                                    .width(126.dp)
+                                    ,
                                 onClick = {
                                     messageKind = 1
                                     messagePulse += 1
@@ -178,9 +189,15 @@ fun NotificationInviteDialog(
                                     contentColor = Color(0xFF3988FE)
                                 ),
                                 border = BorderStroke(1.dp, Color(0xFF3988FE)),
-                                shape = RoundedCornerShape(18.dp)
+                                shape = RoundedCornerShape(18.dp),
+                                contentPadding = PaddingValues(0.dp),
                             ) {
-                                Text("Отклонить", fontSize = 14.sp)
+                                Text("Отклонить", fontSize = 14.sp,
+                                    fontFamily = OnestFontFamily,
+                                    fontWeight = FontWeight.SemiBold,
+                                    textAlign = TextAlign.Center,
+                                    // ✅ Центрирование текста
+                                    modifier = Modifier.fillMaxWidth())
                             }
                         }
 
