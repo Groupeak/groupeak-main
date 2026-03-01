@@ -11,6 +11,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+data class ChangeEmailUiState(
+    val currentEmail: String = "",
+    val newEmail: String = "",
+    val password: String = "",
+    val isLoading: Boolean = false,
+    val isSuccess: Boolean = false,
+    val newEmailError: String? = null,
+    val passwordError: String? = null,
+    val isPasswordVisible: Boolean = false
+)
+
 class ChangeEmailViewModel(
     private val userRepository: UserRepository,
     private val sessionManager: SessionManager,
@@ -43,11 +54,12 @@ class ChangeEmailViewModel(
         val state = uiState
         var hasError = false
 
+        // === Клиентская валидация ===
         if (state.newEmail.isBlank()) {
-            uiState = uiState.copy(newEmailError = "Введите новую почту")
+            uiState = uiState.copy(newEmailError = "Введите новый email")
             hasError = true
-        } else if (!state.newEmail.contains("@")) {
-            uiState = uiState.copy(newEmailError = "Неверный формат email")
+        } else if (!isValidEmail(state.newEmail)) {
+            uiState = uiState.copy(newEmailError = "Введите корректный email")
             hasError = true
         }
 
@@ -79,22 +91,67 @@ class ChangeEmailViewModel(
                 delay(2000)
                 uiState = uiState.copy(isSuccess = false)
             }.onFailure { e ->
-                val msg = e.message.orEmpty()
-                uiState = when {
-                    msg.contains("invalid credentials", ignoreCase = true) -> {
-                        uiState.copy(passwordError = "Неверный пароль")
-                    }
-                    msg.contains("invalid email", ignoreCase = true) -> {
-                        uiState.copy(newEmailError = "Неверный формат email")
-                    }
-                    msg.contains("already", ignoreCase = true) -> {
-                        uiState.copy(newEmailError = "Этот email уже используется")
-                    }
-                    else -> {
-                        uiState.copy(newEmailError = msg.ifBlank { "Ошибка" })
-                    }
-                }
+                handleBackendError(e.message.orEmpty())
             }
         }
+    }
+
+    /**
+     * Обработка ошибок от бэкенда
+     * [backend] new_email is required -> Введите новый email.
+     * [backend] password is required -> Введите пароль.
+     * [backend] invalid credentials -> Неверный пароль.
+     * [backend] new email must not match current email -> Новый email совпадает с текущим.
+     * [backend] invalid email format -> Введите корректный email.
+     * [backend] email domain is not supported -> Домен этого email не поддерживается.
+     * [backend] email already taken -> Этот email уже используется.
+     * [backend] internal server error -> Сервер недоступен. Попробуйте позже.
+     */
+    private fun handleBackendError(message: String) {
+        when {
+            // Введите новый email
+            message.contains("new_email is required", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Введите новый email")
+            }
+            // Введите пароль
+            message.contains("password is required", ignoreCase = true) -> {
+                uiState = uiState.copy(passwordError = "Введите пароль")
+            }
+            // Неверный пароль
+            message.contains("invalid credentials", ignoreCase = true) -> {
+                uiState = uiState.copy(passwordError = "Неверный пароль")
+            }
+            // Новый email совпадает с текущим
+            message.contains("new email must not match current email", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Новый email совпадает с текущим")
+            }
+            // Введите корректный email
+            message.contains("invalid email format", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Введите корректный email")
+            }
+            // Домен этого email не поддерживается
+            message.contains("email domain is not supported", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Домен этого email не поддерживается")
+            }
+            // Этот email уже используется
+            message.contains("email already taken", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Этот email уже используется")
+            }
+            // Сервер недоступен
+            message.contains("internal server error", ignoreCase = true) -> {
+                uiState = uiState.copy(newEmailError = "Сервер недоступен. Попробуйте позже")
+            }
+            // fallback для неизвестных ошибок
+            else -> {
+                uiState = uiState.copy(newEmailError = "Ошибка при смене email")
+            }
+        }
+    }
+
+    /**
+     * Простая валидация email формата
+     */
+    private fun isValidEmail(email: String): Boolean {
+        return android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     }
 }

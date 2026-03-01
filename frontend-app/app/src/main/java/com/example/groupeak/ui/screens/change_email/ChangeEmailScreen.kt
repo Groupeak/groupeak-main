@@ -40,7 +40,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.graphicsLayer
 import kotlinx.coroutines.delay
 
@@ -236,7 +238,80 @@ private fun LabeledInputField(
     }
 }
 
-// === LabeledPasswordField (с глазиком) ===
+@Composable
+private fun LabeledInputField(
+    label: String,
+    iconRes: Int,
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    placeholder: String = "",
+    isError: Boolean = false
+) {
+    Column(modifier = modifier) {
+        // label всегда синий
+        Text(
+            text = label,
+            fontSize = 14.sp,
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            color = BluePrimary300,
+            modifier = Modifier.padding(start = 16.dp)
+        )
+
+        Spacer(modifier = Modifier.height(6.dp))
+
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(55.dp)
+                .border(
+                    width = 1.dp,
+                    color = if (isError) Color.Red else GroupeakLightGray,
+                    shape = RoundedCornerShape(18.dp)
+                )
+                .background(Color.White, RoundedCornerShape(18.dp))
+                .padding(start = 16.dp, end = 16.dp),
+            singleLine = true,
+            textStyle = TextStyle(
+                fontSize = 14.sp,
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Normal,
+                color = GroupeakDarkBlue
+            ),
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            decorationBox = { inner ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        painter = painterResource(id = iconRes),
+                        contentDescription = null,
+                        tint = BluePrimary300,
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Box(Modifier.weight(1f)) {
+                        if (value.isEmpty() && placeholder.isNotEmpty()) {
+                            Text(
+                                text = placeholder,
+                                fontSize = 14.sp,
+                                fontFamily = OnestFontFamily,
+                                fontWeight = FontWeight.Normal,
+                                color = Gray650
+                            )
+                        }
+                        inner()
+                    }
+                }
+            }
+        )
+    }
+}
+
 @Composable
 private fun LabeledPasswordField(
     label: String,
@@ -246,16 +321,16 @@ private fun LabeledPasswordField(
     onToggleVisibility: () -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "",
-    isError: Boolean = false,
-    errorMessage: String? = null
+    isError: Boolean = false
 ) {
     Column(modifier = modifier) {
+        // label всегда синий
         Text(
-            text = if (isError && errorMessage != null) errorMessage else label,
+            text = label,
             fontSize = 14.sp,
             fontFamily = OnestFontFamily,
             fontWeight = FontWeight.Normal,
-            color = if (isError) Color.Red else BluePrimary300,
+            color = BluePrimary300,
             modifier = Modifier.padding(start = 16.dp)
         )
 
@@ -313,7 +388,7 @@ private fun LabeledPasswordField(
                         painter = painterResource(
                             id = if (isPasswordVisible) R.drawable.ic_eye_on else R.drawable.ic_eye_off
                         ),
-                        contentDescription = if (isPasswordVisible) "Скрыть пароль" else "Показать пароль",
+                        contentDescription = null,
                         tint = BluePrimary300,
                         modifier = Modifier
                             .size(24.dp)
@@ -324,7 +399,6 @@ private fun LabeledPasswordField(
         )
     }
 }
-
 // ==========================================
 
 @Composable
@@ -337,6 +411,50 @@ fun ChangeEmailScreen(
     onTogglePasswordVisibility: () -> Unit,
     onNotificationsClick: () -> Unit
 ) {
+    val CardBaseHeight = 378.dp
+    val CardExtraHeight = 28.dp
+    val CardWidth = 348.dp
+    val FieldWidth = 328.dp
+    val FieldHeight = 55.dp
+    val ButtonWidth = 154.dp
+    val ButtonHeight = 32.dp
+
+    // анимационный триггер
+    var pulse by rememberSaveable { mutableStateOf(0) }
+    var isExpanded by rememberSaveable { mutableStateOf(false) }
+    var showText by rememberSaveable { mutableStateOf(false) }
+
+    val hasError = uiState.newEmailError != null || uiState.passwordError != null
+    val errorMessage = uiState.newEmailError ?: uiState.passwordError
+
+    // высота карточки
+    val cardHeight by animateDpAsState(
+        targetValue = if (isExpanded) CardBaseHeight + CardExtraHeight else CardBaseHeight,
+        animationSpec = tween(400, easing = FastOutSlowInEasing)
+    )
+
+    // анимация текста
+    val textAlpha by animateFloatAsState(
+        targetValue = if (showText) 1f else 0f,
+        animationSpec = tween(260, easing = FastOutSlowInEasing)
+    )
+    val textOffset by animateDpAsState(
+        targetValue = if (showText) 0.dp else 10.dp,
+        animationSpec = tween(280, easing = FastOutSlowInEasing)
+    )
+
+    // эффект для анимации успешной смены / ошибки
+    LaunchedEffect(pulse) {
+        if (pulse == 0) return@LaunchedEffect
+        isExpanded = true
+        kotlinx.coroutines.delay(140)
+        showText = true
+        kotlinx.coroutines.delay(2100)
+        showText = false
+        kotlinx.coroutines.delay(280)
+        isExpanded = false
+    }
+
     GroupeakBackground {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -344,120 +462,93 @@ fun ChangeEmailScreen(
         ) {
             CommonHeader(
                 title = "Смена почты",
-                hasNotifications = false,
                 onBackClick = onBackClick,
                 onNotificationsClick = onNotificationsClick
             )
 
             Spacer(modifier = Modifier.height(150.dp))
 
-            // === АНИМАЦИЯ УСПЕХА ===
-            val WhiteCardHeight = 378.dp
-            val SentExtraHeight = 19.dp
-
-            var isExpanded by remember { mutableStateOf(false) }
-            var showMessageText by remember { mutableStateOf(false) }
-            var messagePulse by remember { mutableIntStateOf(0) }
-
-            LaunchedEffect(uiState.isSuccess) {
-                if (uiState.isSuccess) {
-                    messagePulse += 1
-                }
-            }
-
-            val animatedCardHeight by animateDpAsState(
-                targetValue = if (isExpanded) WhiteCardHeight + SentExtraHeight else WhiteCardHeight,
-                animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
-                label = "cardHeight"
-            )
-
-            val sentAlpha by animateFloatAsState(
-                targetValue = if (showMessageText) 1f else 0f,
-                animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-                label = "sentAlpha"
-            )
-
-            val sentSlide by animateDpAsState(
-                targetValue = if (showMessageText) 0.dp else 10.dp,
-                animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-                label = "sentSlide"
-            )
-
-            LaunchedEffect(messagePulse) {
-                if (messagePulse == 0) return@LaunchedEffect
-                isExpanded = true
-                delay(140)
-                showMessageText = true
-                delay(2100)
-                showMessageText = false
-                isExpanded = false
-            }
-
-            Column(
+            Box(
                 modifier = Modifier
-                    .height(animatedCardHeight)
-                    .width(348.dp)
-                    .background(Color.White, RoundedCornerShape(18.dp))
-                    .padding(horizontal = 10.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .width(CardWidth)
+                    .height(cardHeight)
+                    .clip(RoundedCornerShape(18.dp))
+                    .background(Color.White)
             ) {
-                Spacer(modifier = Modifier.height(19.dp))
-
-                LabeledField(
-                    label = "Текущая почта",
-                    iconRes = R.drawable.ic_email,
-                    value = uiState.currentEmail,
-                    valueColor = Gray70717A
-                )
-
-                Spacer(modifier = Modifier.height(11.dp))
-
-                LabeledInputField(
-                    label = "Новая почта",
-                    iconRes = R.drawable.ic_email,
-                    value = uiState.newEmail,
-                    onValueChange = onNewEmailChange,
-                    placeholder = "Введите новую почту",
-                    isError = uiState.newEmailError != null,
-                    errorMessage = uiState.newEmailError
-                )
-
-                Spacer(modifier = Modifier.height(11.dp))
-
-                LabeledPasswordField(
-                    label = "Подтверждение изменений паролем",
-                    value = uiState.password,
-                    onValueChange = onPasswordChange,
-                    isPasswordVisible = uiState.isPasswordVisible,
-                    onToggleVisibility = onTogglePasswordVisibility,
-                    placeholder = "Введите пароль",
-                    isError = uiState.passwordError != null,
-                    errorMessage = uiState.passwordError
-                )
-
-                PrimaryButton(
+                Column(
                     modifier = Modifier
-                        .padding(top = 19.dp)
-                        .width(154.dp)
-                        .height(32.dp)
-                        .align(Alignment.CenterHorizontally),
-                    text = "Изменить",
-                    onClick = { if (!uiState.isLoading) onChangeClick() },
-                    fontSize = 14.sp
-                )
+                        .fillMaxSize()
+                        .padding(horizontal = 10.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Spacer(Modifier.height(19.dp))
 
-                if (isExpanded) {
-                    Text(
-                        text = "Почта изменена",
-                        fontSize = 14.sp,
-                        fontFamily = OnestFontFamily,
-                        fontWeight = FontWeight.Normal,
-                        color = Color(0xFF26BC30),
-                        modifier = Modifier
-                            .padding(top = 14.dp)
-                            .graphicsLayer { alpha = sentAlpha }
-                            .offset(y = sentSlide)
+                    LabeledField(
+                        label = "Текущая почта",
+                        iconRes = R.drawable.ic_email,
+                        value = uiState.currentEmail,
+                        valueColor = Gray70717A
                     )
+
+                    Spacer(Modifier.height(11.dp))
+
+                    LabeledInputField(
+                        label = "Новая почта",
+                        iconRes = R.drawable.ic_email,
+                        value = uiState.newEmail,
+                        onValueChange = onNewEmailChange,
+                        placeholder = "Введите новую почту",
+                        isError = uiState.newEmailError != null,
+                    )
+
+                    Spacer(Modifier.height(11.dp))
+
+                    LabeledPasswordField(
+                        label = "Подтверждение изменений паролем",
+                        value = uiState.password,
+                        onValueChange = onPasswordChange,
+                        isPasswordVisible = uiState.isPasswordVisible,
+                        onToggleVisibility = onTogglePasswordVisibility,
+                        placeholder = "Введите пароль",
+                        isError = uiState.passwordError != null,
+                    )
+
+                    Spacer(Modifier.height(19.dp))
+
+                    PrimaryButton(
+                        modifier = Modifier
+                            .width(ButtonWidth)
+                            .height(ButtonHeight)
+                            .align(Alignment.CenterHorizontally),
+                        text = "Изменить",
+                        onClick = {
+                            if (!uiState.isLoading) {
+                                onChangeClick()
+                                pulse += 1
+                            }
+                        },
+                        fontSize = 14.sp
+                    )
+
+                    // текст успешного изменения или ошибки
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 14.dp)
+                            .graphicsLayer { alpha = textAlpha }
+                            .offset(y = textOffset),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = when {
+                                uiState.isSuccess -> "Почта изменена"
+                                hasError && errorMessage != null -> errorMessage
+                                else -> ""
+                            },
+                            color = if (uiState.isSuccess) Color(0xFF26BC30) else Color.Red,
+                            fontSize = 14.sp
+                        )
+                    }
                 }
             }
         }
