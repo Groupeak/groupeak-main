@@ -36,6 +36,14 @@ fun MainNavGraph(
         startDestination = Screen.Account.route,
         modifier = modifier
     ) {
+        composable(Screen.CreateProject.route) {
+            Text("Создать проект — заглушка", modifier = Modifier.padding(16.dp))
+        }
+
+        composable(Screen.CreateTask.route) {
+            Text("Создать задачу — заглушка", modifier = Modifier.padding(16.dp))
+        }
+
         composable(Screen.Account.route) {
             val vm: AccountViewModel = viewModel(
                 factory = object : ViewModelProvider.Factory {
