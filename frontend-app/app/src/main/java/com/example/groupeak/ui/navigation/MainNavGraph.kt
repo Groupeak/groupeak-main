@@ -164,7 +164,9 @@ fun MainNavGraph(
                 onToggleOldPasswordVisibility = vm::toggleOldPasswordVisibility,
                 onToggleNewPasswordVisibility = vm::toggleNewPasswordVisibility,
                 onToggleConfirmPasswordVisibility = vm::toggleConfirmPasswordVisibility,
-                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+                onNotificationsClick = {
+                    navController.navigate(Screen.Notifications.route)
+                }
             )
         }
 
