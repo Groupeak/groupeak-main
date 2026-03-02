@@ -7,20 +7,26 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"groupeak/internal/models"
 )
 
 var (
-	ErrTaskNotFound           = errors.New("task not found")
-	ErrInvalidTaskStatus      = errors.New("invalid task status for this operation")
-	ErrNotTaskAssignee        = errors.New("user is not assignee of this task")
-	ErrTaskTitleRequired      = errors.New("task title is required")
-	ErrInvalidTaskPriority    = errors.New("invalid task priority")
-	ErrInvalidTaskStatusValue = errors.New("invalid task status")
-	ErrInvalidAssigneeIDs     = errors.New("invalid assignee_ids")
-	ErrAssigneeNotFound       = errors.New("one or more assignees do not exist")
-	ErrAssigneesNotInProject  = errors.New("one or more assignees have no access to this project")
+	ErrTaskNotFound            = errors.New("task not found")
+	ErrInvalidTaskStatus       = errors.New("invalid task status for this operation")
+	ErrNotTaskAssignee         = errors.New("user is not assignee of this task")
+	ErrTaskTitleRequired       = errors.New("task title is required")
+	ErrInvalidTaskPriority     = errors.New("invalid task priority")
+	ErrInvalidTaskStatusValue  = errors.New("invalid task status")
+	ErrInvalidAssigneeIDs      = errors.New("invalid assignee_ids")
+	ErrAssigneeNotFound        = errors.New("one or more assignees do not exist")
+	ErrAssigneesNotInProject   = errors.New("one or more assignees have no access to this project")
+	ErrForbidden               = errors.New("forbidden")
+	ErrTaskNotFoundOrBadStatus = errors.New("task not found or bad status")
+	ErrDueAtRequired           = errors.New("due_at required")
+	ErrBadDecision             = errors.New("bad decision")
+	ErrInvalidProjectID        = errors.New("invalid project ID")
 )
 
 type TaskService struct {
@@ -1018,17 +1024,15 @@ func (s *TaskService) DeleteTask(ctx context.Context, userID, projectID, taskID 
 
 // isProjectOwner проверяет, является ли пользователь владельцем проекта
 func (s *TaskService) isProjectOwner(ctx context.Context, projectID, userID int64) (bool, error) {
+	const q = `SELECT owner_id FROM projects WHERE id = $1`
 	var ownerID int64
-	err := s.db.QueryRowContext(ctx,
-		`SELECT owner_id FROM projects WHERE id = $1`,
-		projectID,
-	).Scan(&ownerID)
 
-	if err == sql.ErrNoRows {
-		return false, ErrProjectNotFound
-	}
+	err := s.db.QueryRowContext(ctx, q, projectID).Scan(&ownerID)
 	if err != nil {
-		return false, fmt.Errorf("query project owner: %w", err)
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, ErrProjectNotFound
+		}
+		return false, err
 	}
 
 	return ownerID == userID, nil
@@ -1048,4 +1052,261 @@ func (s *TaskService) isProjectMember(ctx context.Context, projectID, userID int
 	}
 
 	return exists, nil
+}
+
+// validateTaskFilter проверяет валидность параметров фильтрации
+func (s *TaskService) validateTaskFilter(filter models.TaskFilterRequest) error {
+	if filter.Priority != nil {
+		switch *filter.Priority {
+		case models.TaskPriorityLow, models.TaskPriorityMedium, models.TaskPriorityHigh:
+		default:
+			return ErrInvalidTaskPriority
+		}
+	}
+	if filter.ProjectID != nil && *filter.ProjectID <= 0 {
+		return ErrInvalidProjectID
+	}
+	return nil
+}
+
+// ListTasksWithFilter возвращает список задач с фильтрацией по проекту и/или приоритету
+func (s *TaskService) ListTasksWithFilter(ctx context.Context, userID int64, filter models.TaskFilterRequest) ([]models.Task, error) {
+	if err := s.validateTaskFilter(filter); err != nil {
+		return nil, err
+	}
+
+	// Если выбран конкретный проект — проверяем существование и членство
+	if filter.ProjectID != nil {
+		if err := s.ensureProjectExists(ctx, *filter.ProjectID); err != nil {
+			return nil, err
+		}
+		if err := s.ensureProjectMember(ctx, *filter.ProjectID, userID); err != nil {
+			return nil, err
+		}
+	}
+
+	query := `
+    SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
+    FROM tasks
+    WHERE 1=1
+  `
+
+	args := make([]interface{}, 0)
+	argIndex := 1
+
+	// Если projectID НЕ задан — показываем задачи только из проектов, куда юзер имеет доступ (member или owner)
+	if filter.ProjectID == nil {
+		query += fmt.Sprintf(`
+      AND (
+        project_id IN (SELECT project_id FROM project_members WHERE user_id = $%d)
+        OR project_id IN (SELECT id FROM projects WHERE owner_id = $%d)
+      )
+    `, argIndex, argIndex)
+		args = append(args, userID)
+		argIndex++
+	}
+
+	if filter.ProjectID != nil {
+		query += fmt.Sprintf(" AND project_id = $%d", argIndex)
+		args = append(args, *filter.ProjectID)
+		argIndex++
+	}
+
+	if filter.Priority != nil {
+		query += fmt.Sprintf(" AND priority = $%d", argIndex)
+		args = append(args, *filter.Priority)
+	}
+
+	query += " ORDER BY created_at DESC"
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks with filter: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0)
+	taskIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID,
+			&t.ProjectID,
+			&t.Title,
+			&descField,
+			&commentsField,
+			&t.Status,
+			&t.Priority,
+			&assigneeField,
+			&dueField,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range tasks {
+		ids := assigneesMap[tasks[i].ID]
+		if ids == nil {
+			ids = []int64{}
+		}
+		tasks[i].AssigneeIDs = ids
+	}
+
+	return tasks, nil
+}
+
+// userHasProjectAccess проверяет, имеет ли пользователь доступ хотя бы к одному проекту
+func (s *TaskService) userHasProjectAccess(ctx context.Context, userID int64) (bool, error) {
+	var exists bool
+	err := s.db.QueryRowContext(ctx, `
+    SELECT EXISTS(
+      SELECT 1 FROM project_members WHERE user_id = $1
+    );`, userID).Scan(&exists)
+
+	if err != nil {
+		return false, fmt.Errorf("check project access: %w", err)
+	}
+
+	return exists, nil
+}
+
+// SubmitForReview ставит статус задачи с in_progress на in_review
+func (s *TaskService) SubmitForReview(ctx context.Context, userID, projectID, taskID int64) error {
+	const q = `
+    UPDATE tasks t
+    SET
+        status_before_review = t.status,
+        status = 'in_review',
+        submitted_at = NOW(),
+        updated_at = NOW()
+    FROM task_assignees ta
+    WHERE t.id = $1
+      AND t.project_id = $2
+      AND t.status = 'in_progress'
+      AND ta.task_id = t.id
+      AND ta.user_id = $3
+`
+
+	res, err := s.db.ExecContext(ctx, q, taskID, projectID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrTaskNotFound
+	}
+	return nil
+}
+
+// ReviewTask логика принять задачу или отклонить
+func (s *TaskService) ReviewTask(ctx context.Context, ownerID, projectID, taskID int64, decision string, comment *string, newDueAt *time.Time) error {
+	ok, err := s.isProjectOwner(ctx, projectID, ownerID)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrNotProjectOwner
+	}
+
+	switch decision {
+	case "approve":
+		const q = `
+            UPDATE tasks
+            SET
+                status = 'done',
+                reviewed_at = NOW(),
+                reviewed_by = $1,
+                review_comment = $2,
+                updated_at = NOW()
+            WHERE id = $3
+              AND project_id = $4
+              AND status = 'in_review'
+        `
+		res, err := s.db.ExecContext(ctx, q, ownerID, comment, taskID, projectID)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return ErrTaskNotFoundOrBadStatus
+		}
+		return nil
+
+	case "reject":
+		if newDueAt == nil {
+			return ErrDueAtRequired
+		}
+
+		const q = `
+            UPDATE tasks
+            SET
+                status = 'in_progress',
+                due_at = $1,
+                reviewed_at = NOW(),
+                reviewed_by = $2,
+                review_comment = $3,
+                updated_at = NOW()
+            WHERE id = $4
+              AND project_id = $5
+              AND status = 'in_review'
+        `
+		res, err := s.db.ExecContext(ctx, q, newDueAt, ownerID, comment, taskID, projectID)
+		if err != nil {
+			return err
+		}
+		n, _ := res.RowsAffected()
+		if n == 0 {
+			return ErrTaskNotFoundOrBadStatus
+		}
+		return nil
+
+	default:
+		return ErrBadDecision
+	}
 }
