@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
+	"time"
 
 	"groupeak/internal/models"
 	"groupeak/internal/services"
@@ -13,6 +15,12 @@ import (
 
 type TaskHandler struct {
 	taskService *services.TaskService
+}
+
+type reviewTaskRequest struct {
+	Decision string  `json:"decision"` // "approve" | "reject"
+	Comment  *string `json:"comment"`
+	DueAt    *string `json:"due_at"` // RFC3339, обязателен при reject
 }
 
 func NewTaskHandler(taskService *services.TaskService) *TaskHandler {
@@ -236,4 +244,149 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /api/v1/tasks?project_id=1&priority=high
+func (h *TaskHandler) GetFilteredTasks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var filter models.TaskFilterRequest
+
+	projectIDStr := r.URL.Query().Get("project_id")
+	if projectIDStr != "" {
+		projectID, err := strconv.ParseInt(projectIDStr, 10, 64)
+		if err != nil || projectID <= 0 {
+			writeError(w, http.StatusBadRequest, "invalid project_id")
+			return
+		}
+		filter.ProjectID = &projectID
+	}
+
+	priorityStr := r.URL.Query().Get("priority")
+	if priorityStr != "" {
+		priority := models.TaskPriority(priorityStr)
+		filter.Priority = &priority
+	}
+
+	tasks, err := h.taskService.ListTasksWithFilter(r.Context(), userID, filter)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectMember):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, services.ErrInvalidTaskPriority),
+			errors.Is(err, services.ErrInvalidProjectID):
+			writeError(w, http.StatusBadRequest, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tasks": tasks,
+	})
+}
+
+// POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
+func (h *TaskHandler) SubmitForReview(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, err := parseIDParam(r, "projectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	taskID, err := parseIDParam(r, "taskID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid taskID")
+		return
+	}
+
+	err = h.taskService.SubmitForReview(r.Context(), userID, projectID, taskID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrTaskNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectMember):
+			writeError(w, http.StatusForbidden, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+}
+
+// POST /api/v1/projects/{projectID}/tasks/{taskID}/review
+func (h *TaskHandler) ReviewTask(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, err := parseIDParam(r, "projectID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	taskID, err := parseIDParam(r, "taskID")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid taskID")
+		return
+	}
+
+	var req reviewTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	var newDueAt *time.Time
+	if req.Decision == "reject" {
+		if req.DueAt == nil || *req.DueAt == "" {
+			writeError(w, http.StatusBadRequest, "due_at is required for reject")
+			return
+		}
+		t, err := time.Parse(time.RFC3339, *req.DueAt)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "invalid due_at format")
+			return
+		}
+		newDueAt = &t
+	}
+
+	err = h.taskService.ReviewTask(r.Context(), userID, projectID, taskID, req.Decision, req.Comment, newDueAt)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrTaskNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectMember):
+			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, services.ErrNotProjectOwner):
+			writeError(w, http.StatusForbidden, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }
