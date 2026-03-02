@@ -9,6 +9,7 @@ const (
 	TaskStatusInProgress TaskStatus = "in_progress"
 	TaskStatusDone       TaskStatus = "done"
 	TaskStatusPostponed  TaskStatus = "postponed"
+	TaskStatusReview     TaskStatus = "in_review"
 )
 
 type TaskPriority string
@@ -58,4 +59,9 @@ type PatchTaskRequest struct {
 	DueAt      *time.Time `json:"due_at,omitempty"`
 	DueDate    *time.Time `json:"due_date,omitempty"`
 	ClearDueAt bool       `json:"clear_due_at,omitempty"`
+}
+
+type TaskFilterRequest struct {
+	ProjectID *int64        `json:"project_id,omitempty"`
+	Priority  *TaskPriority `json:"priority,omitempty"`
 }
