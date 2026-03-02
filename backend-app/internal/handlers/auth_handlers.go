@@ -151,7 +151,21 @@ func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = writeJSON(w, http.StatusOK, map[string]interface{}{"user": user})
+	stats, err := h.authService.GetTaskStats(r.Context(), userID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrUserNotFound):
+			writeError(w, http.StatusNotFound, "user not found")
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	_ = writeJSON(w, http.StatusOK, map[string]interface{}{
+		"user":  user,
+		"stats": stats,
+	})
 }
 
 // ChangePassword — POST /api/v1/user/change-password
