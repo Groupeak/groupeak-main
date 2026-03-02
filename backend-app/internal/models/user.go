@@ -72,3 +72,8 @@ type UpdateProfileResponse struct {
 	User  User   `json:"user"`
 	Token string `json:"token,omitempty"`
 }
+
+type TaskStats struct {
+	Done    int `json:"done"`
+	Overdue int `json:"overdue"`
+}
