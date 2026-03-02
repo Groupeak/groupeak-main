@@ -747,3 +747,24 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req model
 		Token: newToken,
 	}, nil
 }
+
+func (s *AuthService) GetTaskStats(ctx context.Context, userID int64) (models.TaskStats, error) {
+	const q = `
+        SELECT
+            COUNT(*) FILTER (WHERE t.status = 'done') AS done,
+            COUNT(*) FILTER (
+                WHERE t.status <> 'done'
+                  AND t.due_at IS NOT NULL
+                  AND t.due_at < NOW()
+            ) AS overdue
+        FROM tasks t
+        JOIN task_assignees ta ON ta.task_id = t.id
+        WHERE ta.user_id = $1
+    `
+	var st models.TaskStats
+	err := s.db.QueryRowContext(ctx, q, userID).Scan(&st.Done, &st.Overdue)
+	if err != nil {
+		return models.TaskStats{}, err
+	}
+	return st, nil
+}
