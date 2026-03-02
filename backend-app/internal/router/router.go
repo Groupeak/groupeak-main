@@ -47,12 +47,17 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Patch("/{projectID}", projectHandler.UpdateProject)       // PATCH /api/v1/projects/{projectID}
 				r.Delete("/{projectID}", projectHandler.DeleteProject)      // DELETE /api/v1/projects/{projectID}
 
-				r.Post("/{projectID}/tasks", taskHandler.CreateTask)            // POST /api/v1/projects/{projectID}/tasks
-				r.Get("/{projectID}/tasks", taskHandler.ListTasks)              // GET  /api/v1/projects/{projectID}/tasks
-				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID)   // GET  /api/v1/projects/{projectID}/tasks/{taskID}
-				r.Patch("/{projectID}/tasks/{taskID}", taskHandler.UpdateTask)  // PATCH /api/v1/projects/projectID/tasks/{taskID}
-				r.Delete("/{projectID}/tasks/{taskID}", taskHandler.DeleteTask) // DELETE /api/v1/projects/{projectID}/tasks/{taskID}//
+				r.Post("/{projectID}/tasks", taskHandler.CreateTask)                      // POST /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks", taskHandler.ListTasks)                        // GET  /api/v1/projects/{projectID}/tasks
+				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID)             // GET  /api/v1/projects/{projectID}/tasks/{taskID}
+				r.Patch("/{projectID}/tasks/{taskID}", taskHandler.UpdateTask)            // PATCH /api/v1/projects/projectID/tasks/{taskID}
+				r.Delete("/{projectID}/tasks/{taskID}", taskHandler.DeleteTask)           // DELETE /api/v1/projects/{projectID}/tasks/{taskID}//
+				r.Post("/{projectID}/tasks/{taskID}/submit", taskHandler.SubmitForReview) // POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
+				r.Post("/{projectID}/tasks/{taskID}/review", taskHandler.ReviewTask)      // POST /api/v1/projects/{projectID}/tasks/{taskID}/review
+
 			})
+
+			r.Get("/tasks", taskHandler.GetFilteredTasks) // GET /api/v1/tasks
 
 			r.Route("/user", func(r chi.Router) {
 				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
