@@ -179,11 +179,11 @@ fun ProfileScreen(
     // Анимация текста снизу (как в FeedbackScreen)
     var isExpanded by rememberSaveable { mutableStateOf(false) }
     var showMessageText by rememberSaveable { mutableStateOf(false) }
-    var messageKind by rememberSaveable { mutableStateOf(0) } // 0 = saved, 1 = canceled
+    var messageText by rememberSaveable { mutableStateOf("Изменения сохранены") }
+    var messageIsError by rememberSaveable { mutableStateOf(false) }
     var messagePulse by rememberSaveable { mutableStateOf(0) }
 
-    val messageText = if (messageKind == 1) "Изменения отменены" else "Изменения сохранены"
-    val messageColor = if (messageKind == 1) CancelledMessageColor else SavedMessageColor
+    val messageColor = if (messageIsError) CancelledMessageColor else SavedMessageColor
 
     val animatedCardHeight by animateDpAsState(
         targetValue = if (isExpanded) WhiteCardHeight + SavedExtraHeight else WhiteCardHeight,
@@ -221,6 +221,14 @@ fun ProfileScreen(
         isExpanded = false
     }
 
+    LaunchedEffect(uiState.statusMessagePulse) {
+        if (uiState.statusMessagePulse == 0 || uiState.statusMessage.isNullOrBlank()) return@LaunchedEffect
+
+        messageText = uiState.statusMessage
+        messageIsError = uiState.statusMessageIsError
+        messagePulse += 1
+    }
+
     GroupeakBackground {
         Box(modifier = Modifier.fillMaxSize()) {
 
@@ -230,7 +238,8 @@ fun ProfileScreen(
                     onConfirm = {
                         showCancelDialog = false
                         positionMenuExpanded = false
-                        messageKind = 1
+                        messageText = "Изменения отменены"
+                        messageIsError = true
                         messagePulse += 1
                         onCancelEdit()
                     }
@@ -299,8 +308,6 @@ fun ProfileScreen(
                                             modifier = Modifier.clickable {
                                                 positionMenuExpanded = false
                                                 onSaveClick()
-                                                messageKind = 0
-                                                messagePulse += 1
                                             }
                                         )
                                     }

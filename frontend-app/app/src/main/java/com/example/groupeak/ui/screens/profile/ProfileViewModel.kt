@@ -51,10 +51,23 @@ class ProfileViewModel(
     }
 
     fun onSaveClick() {
-        val fullName = uiState.fullName.trim()
-        if (fullName.isBlank()) return
+        val fullName = uiState.fullName.normalizeSpaces()
+        if (fullName.isBlank()) {
+            showStatusMessage("Имя не должно быть пустым", isError = true)
+            return
+        }
 
-        val birthDateForBackend = digitsToBackendBirthDate(uiState.birthDate) ?: return
+        if (!isValidFullName(fullName)) {
+            showStatusMessage("Некорректные данные", isError = true)
+            return
+        }
+
+        val birthDateForBackend = digitsToBackendBirthDate(uiState.birthDate)
+        if (birthDateForBackend == null) {
+            showStatusMessage("Неверный формат даты рождения", isError = true)
+            return
+        }
+
         val aboutForBackend = uiState.about.let { if (it.isBlank()) "" else it.trim() }
         val positionForBackend = uiState.position.trim()
 
@@ -76,6 +89,12 @@ class ProfileViewModel(
                     birthDate = backendBirthDateToDigits(user.birthDate),
                     about = user.about.orEmpty(),
                 )
+                showStatusMessage("Изменения сохранены", isError = false)
+            }.onFailure { throwable ->
+                showStatusMessage(
+                    mapProfileErrorToRussian(throwable.message),
+                    isError = true,
+                )
             }
         }
     }
@@ -87,21 +106,21 @@ class ProfileViewModel(
     }
 
     fun onFullNameChange(value: String) {
-        uiState = uiState.copy(fullName = value)
+        uiState = uiState.copy(fullName = value).clearStatus()
     }
 
     fun onBirthDateChange(raw: String) {
         val digits = raw.filter { it.isDigit() }.take(8) // DDMMYYYY
-        uiState = uiState.copy(birthDate = digits)
+        uiState = uiState.copy(birthDate = digits).clearStatus()
     }
 
     fun onPositionChange(value: String) {
         if (!uiState.isEditing) return
-        uiState = uiState.copy(position = value)
+        uiState = uiState.copy(position = value).clearStatus()
     }
 
     fun onAboutChange(value: String) {
-        uiState = uiState.copy(about = value)
+        uiState = uiState.copy(about = value).clearStatus()
     }
 
     private fun digitsToBackendBirthDate(digits: String): String? {
@@ -120,4 +139,37 @@ class ProfileViewModel(
             ?.take(8)
             .orEmpty()
     }
+
+    private fun showStatusMessage(message: String, isError: Boolean) {
+        uiState = uiState.copy(
+            statusMessage = message,
+            statusMessageIsError = isError,
+            statusMessagePulse = uiState.statusMessagePulse + 1,
+        )
+    }
+
+    private fun mapProfileErrorToRussian(message: String?): String {
+        return when (message?.trim()) {
+            "invalid birth date, expected format dd.mm.yyyy" -> "Неверный формат даты рождения"
+            "birth date must make age between 8 and 100 years" -> "Неверный формат даты рождения"
+            "internal server error" -> "Сервер недоступен. Попробуйте позже"
+            else -> "Сервер недоступен. Попробуйте позже"
+        }
+    }
+
+    private fun isValidFullName(value: String): Boolean {
+        val normalized = value.normalizeSpaces()
+        if (normalized.isBlank()) return false
+
+        val fullNameRegex = Regex("^[A-Za-zА-Яа-яЁё]+(?:[\\s-][A-Za-zА-Яа-яЁё]+)*$")
+        return fullNameRegex.matches(normalized)
+    }
+
+    private fun String.normalizeSpaces(): String =
+        trim().replace(Regex("\\s+"), " ")
+
+    private fun ProfileUiState.clearStatus(): ProfileUiState = copy(
+        statusMessage = null,
+        statusMessageIsError = false,
+    )
 }

@@ -183,10 +183,6 @@ fun MainNavGraph(
             Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
         }
 
-        composable(Screen.Calendar.route) {
-            Text("Календарь — заглушка", modifier = Modifier.padding(16.dp))
-        }
-
         // Уведомления
         composable(Screen.Notifications.route) {
             NotificationsScreen(
