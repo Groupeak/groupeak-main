@@ -27,6 +27,7 @@ var (
 	ErrDueAtRequired           = errors.New("due_at required")
 	ErrBadDecision             = errors.New("bad decision")
 	ErrInvalidProjectID        = errors.New("invalid project ID")
+	ErrInvalidTaskCategory     = errors.New("invalid task category")
 )
 
 type TaskService struct {
@@ -1309,4 +1310,224 @@ func (s *TaskService) ReviewTask(ctx context.Context, ownerID, projectID, taskID
 	default:
 		return ErrBadDecision
 	}
+}
+
+func (s *TaskService) validateTaskCategory(category models.TaskCategory) error {
+	switch category {
+	case models.TaskCategoryCurrent, models.TaskCategoryReview, models.TaskCategoryInactive:
+		return nil
+	default:
+		return ErrInvalidTaskCategory
+	}
+}
+
+func (s *TaskService) ListProjectTasksByCategory(ctx context.Context, userID, projectID int64, category models.TaskCategory) ([]models.Task, error) {
+	if err := s.ensureProjectExists(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureProjectMember(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+	if err := s.validateTaskCategory(category); err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
+		FROM tasks
+		WHERE project_id = $1
+	`
+
+	switch category {
+	case models.TaskCategoryCurrent:
+		query += `
+			AND status IN ('todo', 'in_progress', 'postponed')
+			AND (due_at IS NULL OR due_at >= NOW())
+		`
+	case models.TaskCategoryReview:
+		query += `
+			AND status = 'in_review'
+		`
+	case models.TaskCategoryInactive:
+		query += `
+			AND (
+				status = 'done'
+				OR (status <> 'done' AND due_at IS NOT NULL AND due_at < NOW())
+			)
+		`
+	}
+
+	query += ` ORDER BY created_at DESC;`
+
+	rows, err := s.db.QueryContext(ctx, query, projectID)
+	if err != nil {
+		return nil, fmt.Errorf("list project tasks by category: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0)
+	taskIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID,
+			&t.ProjectID,
+			&t.Title,
+			&descField,
+			&commentsField,
+			&t.Status,
+			&t.Priority,
+			&assigneeField,
+			&dueField,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range tasks {
+		ids := assigneesMap[tasks[i].ID]
+		if ids == nil {
+			ids = []int64{}
+		}
+		tasks[i].AssigneeIDs = ids
+	}
+
+	return tasks, nil
+}
+
+func (s *TaskService) ListNearestTasks(ctx context.Context, userID int64) ([]models.Task, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT DISTINCT t.id, t.project_id, t.title, t.description, t.comments, t.status, t.priority, t.assignee_id, t.due_at, t.created_at, t.updated_at
+		FROM tasks t
+		JOIN task_assignees ta ON ta.task_id = t.id
+		WHERE ta.user_id = $1
+		  AND t.status <> 'done'
+		  AND t.due_at IS NOT NULL
+		  AND t.due_at >= NOW()
+		ORDER BY t.due_at ASC, t.created_at ASC
+		LIMIT 3;
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("list nearest tasks: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0, 3)
+	taskIDs := make([]int64, 0, 3)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID,
+			&t.ProjectID,
+			&t.Title,
+			&descField,
+			&commentsField,
+			&t.Status,
+			&t.Priority,
+			&assigneeField,
+			&dueField,
+			&t.CreatedAt,
+			&t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan nearest task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows nearest tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range tasks {
+		ids := assigneesMap[tasks[i].ID]
+		if ids == nil {
+			ids = []int64{}
+		}
+		tasks[i].AssigneeIDs = ids
+	}
+
+	return tasks, nil
 }
