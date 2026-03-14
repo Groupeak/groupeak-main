@@ -57,7 +57,8 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 
 			})
 
-			r.Get("/tasks", taskHandler.GetFilteredTasks) // GET /api/v1/tasks
+			r.Get("/tasks", taskHandler.GetFilteredTasks)        // GET /api/v1/tasks
+			r.Get("/tasks/nearest", taskHandler.GetNearestTasks) // GET /api/v1/tasks/nearest
 
 			r.Route("/user", func(r chi.Router) {
 				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
