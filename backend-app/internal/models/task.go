@@ -12,6 +12,14 @@ const (
 	TaskStatusReview     TaskStatus = "in_review"
 )
 
+type TaskCategory string
+
+const (
+	TaskCategoryCurrent  TaskCategory = "current"
+	TaskCategoryReview   TaskCategory = "review"
+	TaskCategoryInactive TaskCategory = "inactive"
+)
+
 type TaskPriority string
 
 const (
