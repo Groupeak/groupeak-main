@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"groupeak/internal/models"
@@ -84,7 +85,6 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/v1/projects/{projectID}/tasks
 func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := getUserIDFromContext(r.Context())
 	if !ok {
@@ -98,13 +98,22 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	tasks, err := h.taskService.ListProjectTasks(r.Context(), userID, projectID)
+	category := strings.TrimSpace(r.URL.Query().Get("category"))
+
+	var tasks []models.Task
+	if category == "" {
+		tasks, err = h.taskService.ListProjectTasks(r.Context(), userID, projectID)
+	} else {
+		tasks, err = h.taskService.ListProjectTasksByCategory(r.Context(), userID, projectID, models.TaskCategory(category))
+	}
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrProjectNotFound):
 			writeError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, services.ErrNotProjectMember):
 			writeError(w, http.StatusForbidden, err.Error())
+		case errors.Is(err, services.ErrInvalidTaskCategory):
+			writeError(w, http.StatusBadRequest, err.Error())
 		default:
 			writeError(w, http.StatusInternalServerError, "internal server error")
 		}
@@ -389,4 +398,23 @@ func (h *TaskHandler) ReviewTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = writeJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
+}
+
+// GET /api/v1/tasks/nearest
+func (h *TaskHandler) GetNearestTasks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tasks, err := h.taskService.ListNearestTasks(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"tasks": tasks,
+	})
 }
