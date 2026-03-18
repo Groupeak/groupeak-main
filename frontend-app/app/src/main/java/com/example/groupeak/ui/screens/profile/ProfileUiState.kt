@@ -6,5 +6,8 @@ data class ProfileUiState(
     val position: String = "",
     val about: String = "",
     val hasNotifications: Boolean = true,
-    val isEditing: Boolean = false
+    val isEditing: Boolean = false,
+    val statusMessage: String? = null,
+    val statusMessageIsError: Boolean = false,
+    val statusMessagePulse: Int = 0,
 )

@@ -95,13 +95,15 @@ private val FieldTextStyle = TextStyle(
     color = GroupeakDarkBlue
 )
 
-private val SentMessageTextStyle = TextStyle(
+private val StatusMessageTextStyle = TextStyle(
     fontSize = 14.sp,
     lineHeight = 14.sp,
     fontFamily = OnestFontFamily,
     fontWeight = FontWeight.Normal,
-    color = Color(0xFF26BC30)
 )
+
+private val SuccessStatusColor = Color(0xFF26BC30)
+private val ErrorStatusColor = Color(0xFFFF0000)
 
 @Composable
 fun FeedbackScreen(
@@ -116,6 +118,10 @@ fun FeedbackScreen(
     var isExpanded by rememberSaveable { mutableStateOf(false) }
     var showSentText by rememberSaveable { mutableStateOf(false) }
     var sentPulse by rememberSaveable { mutableStateOf(0) }
+    var statusText by rememberSaveable { mutableStateOf("Сообщение отправлено") }
+    var statusIsError by rememberSaveable { mutableStateOf(false) }
+
+    val statusColor = if (statusIsError) ErrorStatusColor else SuccessStatusColor
 
     val animatedCardHeight by animateDpAsState(
         targetValue = if (isExpanded) WhiteCardHeight + SentExtraHeight else WhiteCardHeight,
@@ -250,7 +256,20 @@ fun FeedbackScreen(
                         ) {
                             SendButton154x32(
                                 text = "Отправить",
-                                onClick = { sentPulse += 1 }
+                                onClick = {
+                                    val isSubjectEmpty = subject.trim().isEmpty()
+                                    val isMessageEmpty = message.trim().isEmpty()
+
+                                    if (isSubjectEmpty || isMessageEmpty) {
+                                        statusText = "Введите тему и описание обращения"
+                                        statusIsError = true
+                                    } else {
+                                        statusText = "Сообщение отправлено"
+                                        statusIsError = false
+                                    }
+
+                                    sentPulse += 1
+                                }
                             )
                         }
                     }
@@ -265,8 +284,8 @@ fun FeedbackScreen(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "Сообщение отправлено",
-                            style = SentMessageTextStyle,
+                            text = statusText,
+                            style = StatusMessageTextStyle.copy(color = statusColor),
                             maxLines = 1,
                             softWrap = false,
                             modifier = Modifier

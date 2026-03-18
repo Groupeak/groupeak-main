@@ -2,4 +2,11 @@
 <resources>
 
     <style name="Theme.Groupeak" parent="android:Theme.Material.Light.NoActionBar" />
+
+    <style name="Theme.Groupeak.Splash" parent="Theme.SplashScreen">
+        <item name="windowSplashScreenBackground">@color/splash_bg</item>
+        <item name="postSplashScreenTheme">@style/Theme.Groupeak</item>
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo_safe</item>
+    </style>
+
 </resources>
