@@ -47,6 +47,7 @@ fun RootNavGraph(rootNavController: NavHostController) {
 
         composable(Graph.MAIN) {
             MainRoot(
+
                 onLogout = {
                     ServiceLocator.sessionManager.clear()
                     rootNavController.navigate(Graph.AUTH) {

@@ -20,6 +20,7 @@ import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
 import com.example.groupeak.ui.screens.change_email.ChangeEmailViewModel
 import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
 import com.example.groupeak.ui.screens.change_password.ChangePasswordViewModel
+import com.example.groupeak.ui.screens.createproject.CreateProjectScreen
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
@@ -37,7 +38,11 @@ fun MainNavGraph(
         modifier = modifier
     ) {
         composable(Screen.CreateProject.route) {
-            Text("Создать проект — заглушка", modifier = Modifier.padding(16.dp))
+            CreateProjectScreen(
+                onBack = { navController.popBackStack() },
+                hasNotifications = true,
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+            )
         }
 
         composable(Screen.CreateTask.route) {
