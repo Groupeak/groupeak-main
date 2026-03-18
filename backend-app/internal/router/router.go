@@ -46,6 +46,7 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Post("/invites/accept", projectHandler.AcceptInvite)      // POST /api/v1/projects/invites/accept
 				r.Patch("/{projectID}", projectHandler.UpdateProject)       // PATCH /api/v1/projects/{projectID}
 				r.Delete("/{projectID}", projectHandler.DeleteProject)      // DELETE /api/v1/projects/{projectID}
+				r.Get("/{projectID}", projectHandler.GetProject)            // GET /api/v1/projects/{projectID}
 
 				r.Post("/{projectID}/tasks", taskHandler.CreateTask)                      // POST /api/v1/projects/{projectID}/tasks
 				r.Get("/{projectID}/tasks", taskHandler.ListTasks)                        // GET  /api/v1/projects/{projectID}/tasks
@@ -59,6 +60,7 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 
 			r.Get("/tasks", taskHandler.GetFilteredTasks)        // GET /api/v1/tasks
 			r.Get("/tasks/nearest", taskHandler.GetNearestTasks) // GET /api/v1/tasks/nearest
+			r.Get("/tasks/my", taskHandler.GetMyTasks)           // GET /api/v1/tasks/my
 
 			r.Route("/user", func(r chi.Router) {
 				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
