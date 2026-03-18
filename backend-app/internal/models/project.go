@@ -71,3 +71,9 @@ type PatchProjectRequest struct {
 	DeadlineAt      *time.Time `json:"deadline_at,omitempty"`
 	ClearDeadlineAt bool       `json:"clear_deadline_at,omitempty"`
 }
+
+type ProjectWithStats struct {
+	Project
+	MemberCount int `json:"member_count"`
+	TaskCount   int `json:"task_count"`
+}
