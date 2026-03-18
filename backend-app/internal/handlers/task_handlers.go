@@ -120,6 +120,22 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	assigneeFilter := parseAssigneeFilter(r)
+	if len(assigneeFilter) > 0 {
+		tasks, err = h.taskService.ListProjectTasksByAssignees(r.Context(), userID, projectID, assigneeFilter)
+		if err != nil {
+			switch {
+			case errors.Is(err, services.ErrProjectNotFound):
+				writeError(w, http.StatusNotFound, err.Error())
+			case errors.Is(err, services.ErrNotProjectMember):
+				writeError(w, http.StatusForbidden, err.Error())
+			default:
+				writeError(w, http.StatusInternalServerError, "internal server error")
+			}
+			return
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"tasks": tasks,
 	})
@@ -417,4 +433,40 @@ func (h *TaskHandler) GetNearestTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"tasks": tasks,
 	})
+}
+
+func parseAssigneeFilter(r *http.Request) []int64 {
+	assigneesStr := r.URL.Query().Get("assignees")
+	if assigneesStr == "" {
+		return nil
+	}
+	parts := strings.Split(assigneesStr, ",")
+	filter := make([]int64, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if id, err := strconv.ParseInt(p, 10, 64); err == nil && id > 0 {
+			filter = append(filter, id)
+		}
+	}
+	return filter
+}
+
+// GET /api/v1/tasks/my
+func (h *TaskHandler) GetMyTasks(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	tasks, err := h.taskService.GetMyTasks(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal server error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
 }
