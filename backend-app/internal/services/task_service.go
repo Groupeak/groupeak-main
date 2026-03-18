@@ -1531,3 +1531,183 @@ func (s *TaskService) ListNearestTasks(ctx context.Context, userID int64) ([]mod
 
 	return tasks, nil
 }
+
+func (s *TaskService) ListProjectTasksByAssignees(ctx context.Context, userID, projectID int64, assigneeFilter []int64) ([]models.Task, error) {
+	if err := s.ensureProjectExists(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if err := s.ensureProjectMember(ctx, projectID, userID); err != nil {
+		return nil, err
+	}
+
+	query := `
+		SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
+		FROM tasks
+		WHERE project_id = $1
+	`
+	args := []interface{}{projectID}
+
+	if len(assigneeFilter) > 0 {
+		ph := makePlaceholders(2, len(assigneeFilter))
+		query += fmt.Sprintf(` AND EXISTS (
+			SELECT 1 FROM task_assignees ta 
+			WHERE ta.task_id = tasks.id AND ta.user_id IN (%s)
+		)`, ph)
+		for _, uid := range assigneeFilter {
+			args = append(args, uid)
+		}
+	}
+
+	query += ` ORDER BY created_at DESC;`
+
+	rows, err := s.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("list tasks by assignees: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0)
+	taskIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID, &t.ProjectID, &t.Title, &descField, &commentsField,
+			&t.Status, &t.Priority, &assigneeField, &dueField,
+			&t.CreatedAt, &t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := range tasks {
+		ids := assigneesMap[tasks[i].ID]
+		if ids == nil {
+			ids = []int64{}
+		}
+		tasks[i].AssigneeIDs = ids
+	}
+
+	return tasks, nil
+}
+
+func (s *TaskService) GetMyTasks(ctx context.Context, userID int64) ([]models.Task, error) {
+	query := `
+		SELECT id, project_id, title, description, comments, status, priority, assignee_id, due_at, created_at, updated_at
+		FROM tasks t
+		JOIN task_assignees ta ON ta.task_id = t.id
+		WHERE ta.user_id = $1
+		ORDER BY t.created_at DESC;
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get my tasks: %w", err)
+	}
+	defer rows.Close()
+
+	tasks := make([]models.Task, 0)
+	taskIDs := make([]int64, 0)
+
+	for rows.Next() {
+		var (
+			t             models.Task
+			descField     sql.NullString
+			commentsField sql.NullString
+			assigneeField sql.NullInt64
+			dueField      sql.NullTime
+		)
+
+		err = rows.Scan(
+			&t.ID, &t.ProjectID, &t.Title, &descField, &commentsField,
+			&t.Status, &t.Priority, &assigneeField, &dueField,
+			&t.CreatedAt, &t.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("scan my task: %w", err)
+		}
+
+		if descField.Valid {
+			v := descField.String
+			t.Description = &v
+		}
+		if commentsField.Valid {
+			v := commentsField.String
+			t.Comments = &v
+		}
+		if assigneeField.Valid {
+			v := assigneeField.Int64
+			t.AssigneeID = &v
+		}
+		if dueField.Valid {
+			v := dueField.Time
+			t.DueAt = &v
+		}
+
+		t.AssigneeIDs = []int64{}
+		tasks = append(tasks, t)
+		taskIDs = append(taskIDs, t.ID)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("rows my tasks: %w", err)
+	}
+
+	if len(tasks) == 0 {
+		return tasks, nil
+	}
+
+	assigneesMap, err := s.getAssigneesForTasks(ctx, taskIDs)
+	if err != nil {
+		return nil, err
+	}
+	for i := range tasks {
+		if ids := assigneesMap[tasks[i].ID]; ids != nil {
+			tasks[i].AssigneeIDs = ids
+		}
+	}
+
+	return tasks, nil
+}
