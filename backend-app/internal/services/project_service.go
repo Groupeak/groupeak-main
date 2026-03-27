@@ -713,3 +713,60 @@ func (s *ProjectService) DeleteProject(ctx context.Context, ownerID, projectID i
 
 	return nil
 }
+
+func (s *ProjectService) GetProjectDetails(ctx context.Context, userID, projectID int64) (*models.ProjectWithStats, error) {
+	if err := s.ensureProjectExists(ctx, projectID); err != nil {
+		return nil, err
+	}
+	if isMember, err := s.isProjectMember(ctx, projectID, userID); err != nil || !isMember {
+		if err != nil {
+			return nil, err
+		}
+		return nil, ErrNotProjectMember
+	}
+
+	query := `
+		SELECT 
+			p.id, p.owner_id, p.name, p.description, p.deadline_at,
+			p.created_at, p.updated_at,
+			(SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
+			(SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count
+		FROM projects p 
+		WHERE p.id = $1;
+	`
+
+	var (
+		stats         models.ProjectWithStats
+		descField     sql.NullString
+		deadlineField sql.NullTime
+	)
+
+	err := s.db.QueryRowContext(ctx, query, projectID).Scan(
+		&stats.ID,
+		&stats.OwnerID,
+		&stats.Name,
+		&descField,
+		&deadlineField,
+		&stats.CreatedAt,
+		&stats.UpdatedAt,
+		&stats.MemberCount,
+		&stats.TaskCount,
+	)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("get project details: %w", err)
+	}
+
+	if descField.Valid {
+		v := descField.String
+		stats.Description = &v
+	}
+	if deadlineField.Valid {
+		v := deadlineField.Time
+		stats.DeadlineAt = &v
+	}
+
+	return &stats, nil
+}

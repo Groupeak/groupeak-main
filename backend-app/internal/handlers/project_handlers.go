@@ -249,3 +249,33 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// GET /api/v1/projects/{projectID}
+func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
+	userID, ok := getUserIDFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	projectID, ok := parseProjectID(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "invalid projectID")
+		return
+	}
+
+	project, err := h.projectService.GetProjectDetails(r.Context(), userID, projectID)
+	if err != nil {
+		switch {
+		case errors.Is(err, services.ErrProjectNotFound):
+			writeError(w, http.StatusNotFound, err.Error())
+		case errors.Is(err, services.ErrNotProjectMember):
+			writeError(w, http.StatusForbidden, err.Error())
+		default:
+			writeError(w, http.StatusInternalServerError, "internal server error")
+		}
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+}
