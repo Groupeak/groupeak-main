@@ -2,9 +2,7 @@ package services
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"groupeak/internal/models"
@@ -12,18 +10,17 @@ import (
 )
 
 var (
-	ErrProjectNotFound      = errors.New("project not found")
-	ErrNotProjectOwner      = errors.New("user is not project owner")
-	ErrNotProjectMember     = errors.New("user is not a member of this project")
-	ErrAlreadyProjectMember = errors.New("user is already project member")
-
+	ErrProjectNotFound       = errors.New("project not found")
+	ErrNotProjectOwner       = errors.New("user is not project owner")
+	ErrNotProjectMember      = errors.New("user is not a member of this project")
+	ErrAlreadyProjectMember  = errors.New("user is already project member")
 	ErrInviteNotFound        = errors.New("invite not found")
 	ErrInviteAlreadyUsed     = errors.New("invite is already used or revoked")
 	ErrInviteAlreadyPending  = errors.New("invite already pending for this email")
 	ErrInviteEmailMismatch   = errors.New("invite email does not match user email")
 	ErrInviteTokenRequired   = errors.New("invite token is required")
 	ErrProjectNameIsRequired = errors.New("project name is required")
-	ErrNoFieldsToUpdate      = errors.New("no fields to update")
+	ErrCannotRemoveOwner     = errors.New("cannot remove project owner")
 )
 
 type ProjectService struct {
@@ -291,298 +288,6 @@ func (s *ProjectService) ListUserProjects(ctx context.Context, userID int64) ([]
 	return projects, nil
 }
 
-// InviteMember создаёт инвайт по email
-func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID int64, req models.InviteMemberRequest) (*models.ProjectInvite, error) {
-	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
-	if err != nil {
-		return nil, err
-	}
-	if !isOwner {
-		return nil, ErrNotProjectOwner
-	}
-
-	email, err := normalizeAndValidateEmail(req.Email)
-	if err != nil {
-		return nil, err
-	}
-
-	var alreadyMember bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_members pm
-			JOIN users u ON u.id = pm.user_id
-			WHERE pm.project_id = $1 AND u.email = $2
-		);
-		`,
-		projectID,
-		email,
-	).Scan(&alreadyMember)
-	if err != nil {
-		return nil, err
-	}
-	if alreadyMember {
-		return nil, ErrAlreadyProjectMember
-	}
-
-	var existingInviteID int64
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT id
-		FROM project_invites
-		WHERE project_id = $1 AND email = $2 AND status = 'pending';
-		`,
-		projectID,
-		email,
-	).Scan(&existingInviteID)
-	if err != nil && err != sql.ErrNoRows {
-		return nil, err
-	}
-	if err == nil {
-		return nil, ErrInviteAlreadyPending
-	}
-
-	token, err := generateInviteToken()
-	if err != nil {
-		return nil, fmt.Errorf("generate invite token: %w", err)
-	}
-
-	var invite models.ProjectInvite
-
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		INSERT INTO project_invites (project_id, email, token, status)
-		VALUES ($1, $2, $3, 'pending')
-		RETURNING id, project_id, email, token, status, created_at, updated_at;
-		`,
-		projectID,
-		email,
-		token,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	return &invite, nil
-}
-
-// ListProjectMembers возвращает список участников проекта с данными пользователя
-func (s *ProjectService) ListProjectMembers(ctx context.Context, userID, projectID int64) ([]models.ProjectMemberWithUser, error) {
-	err := s.ensureProjectExists(ctx, projectID)
-	if err != nil {
-		return nil, err
-	}
-
-	isMember, err := s.isProjectMember(ctx, projectID, userID)
-	if err != nil {
-		return nil, err
-	}
-	if !isMember {
-		return nil, ErrNotProjectMember
-	}
-
-	query := `
-		SELECT
-			pm.id,
-			pm.project_id,
-			pm.user_id,
-			pm.role,
-			pm.created_at,
-			COALESCE(u.full_name, '') as full_name,
-			u.email,
-			COALESCE(u.position, '') as position,
-			u.avatar_url
-		FROM project_members pm
-		JOIN users u ON u.id = pm.user_id
-		WHERE pm.project_id = $1
-		ORDER BY
-			CASE pm.role WHEN 'owner' THEN 0 ELSE 1 END,
-			COALESCE(u.full_name, '');
-	`
-
-	rows, err := s.db.QueryContext(ctx, query, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var members []models.ProjectMemberWithUser
-
-	for rows.Next() {
-		var (
-			member      models.ProjectMemberWithUser
-			avatarField sql.NullString
-		)
-
-		err = rows.Scan(
-			&member.ID,
-			&member.ProjectID,
-			&member.UserID,
-			&member.Role,
-			&member.CreatedAt,
-			&member.FullName,
-			&member.Email,
-			&member.Position,
-			&avatarField,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if avatarField.Valid {
-			value := avatarField.String
-			member.AvatarURL = &value
-		}
-
-		members = append(members, member)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return members, nil
-}
-
-// AcceptInvite по токену добавляет юзера в project_members и помечает инвайт как accepted
-func (s *ProjectService) AcceptInvite(ctx context.Context, userID int64, token string) (*models.ProjectInvite, error) {
-	token = strings.TrimSpace(token)
-	if token == "" {
-		return nil, ErrInviteTokenRequired
-	}
-
-	var userEmail string
-	err := s.db.QueryRowContext(
-		ctx,
-		`SELECT email FROM users WHERE id = $1;`,
-		userID,
-	).Scan(&userEmail)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
-		}
-		return nil, err
-	}
-
-	var invite models.ProjectInvite
-
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT id, project_id, email, token, status, created_at, updated_at
-		FROM project_invites
-		WHERE token = $1;
-		`,
-		token,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrInviteNotFound
-		}
-		return nil, err
-	}
-
-	if invite.Status != "pending" {
-		return nil, ErrInviteAlreadyUsed
-	}
-
-	if !strings.EqualFold(invite.Email, userEmail) {
-		return nil, ErrInviteEmailMismatch
-	}
-
-	var alreadyMember bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_members
-			WHERE project_id = $1 AND user_id = $2
-		);
-		`,
-		invite.ProjectID,
-		userID,
-	).Scan(&alreadyMember)
-	if err != nil {
-		return nil, err
-	}
-	if alreadyMember {
-		return nil, ErrAlreadyProjectMember
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	_, err = tx.ExecContext(
-		ctx,
-		`
-		INSERT INTO project_members (project_id, user_id, role)
-		VALUES ($1, $2, 'member');
-		`,
-		invite.ProjectID,
-		userID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.QueryRowContext(
-		ctx,
-		`
-		UPDATE project_invites
-		SET status = 'accepted', updated_at = NOW()
-		WHERE id = $1
-		RETURNING id, project_id, email, token, status, created_at, updated_at;
-		`,
-		invite.ID,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-
-	return &invite, nil
-}
-
 func (s *ProjectService) isProjectOwner(ctx context.Context, projectID, userID int64) (bool, error) {
 	var ownerID int64
 	err := s.db.QueryRowContext(
@@ -637,16 +342,7 @@ func (s *ProjectService) ensureProjectExists(ctx context.Context, projectID int6
 	return nil
 }
 
-func generateInviteToken() (string, error) {
-	buf := make([]byte, 16)
-	_, err := rand.Read(buf)
-	if err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-// DeleteProject удаляет проект и все связанные данные
+// DeleteProject удаляет проект. Благодаря ON DELETE CASCADE в БД
 func (s *ProjectService) DeleteProject(ctx context.Context, ownerID, projectID int64) error {
 	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
 	if err != nil {
@@ -656,59 +352,9 @@ func (s *ProjectService) DeleteProject(ctx context.Context, ownerID, projectID i
 		return ErrNotProjectOwner
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
-		}
-	}()
-
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM notifications WHERE project_id = $1`,
-		projectID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete notifications: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM project_calendar WHERE project_id = $1`,
-		projectID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete calendar events: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM project_members WHERE project_id = $1`,
-		projectID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete project members: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM project_invites WHERE project_id = $1`,
-		projectID,
-	)
-	if err != nil {
-		return fmt.Errorf("delete project invites: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx,
-		`DELETE FROM projects WHERE id = $1`,
-		projectID,
-	)
+	_, err = s.db.ExecContext(ctx, `DELETE FROM projects WHERE id = $1`, projectID)
 	if err != nil {
 		return fmt.Errorf("delete project: %w", err)
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return fmt.Errorf("commit: %w", err)
 	}
 
 	return nil
@@ -769,4 +415,62 @@ func (s *ProjectService) GetProjectDetails(ctx context.Context, userID, projectI
 	}
 
 	return &stats, nil
+}
+
+// RemoveMember удаляет участника из проекта
+func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectID, targetUserID int64) error {
+	var ownerID int64
+	err := s.db.QueryRowContext(ctx, `SELECT owner_id FROM projects WHERE id = $1`, projectID).Scan(&ownerID)
+	if err == sql.ErrNoRows {
+		return ErrProjectNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("query project owner: %w", err)
+	}
+
+	isOwner := (requesterID == ownerID)
+	isSelf := (requesterID == targetUserID)
+
+	if !isOwner && !isSelf {
+		return ErrForbidden
+	}
+
+	if targetUserID == ownerID {
+		return ErrCannotRemoveOwner
+	}
+
+	var exists bool
+	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2)`, projectID, targetUserID).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("check member exists: %w", err)
+	}
+	if !exists {
+		return ErrNotProjectMember
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	_, err = tx.ExecContext(ctx, `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`, projectID, targetUserID)
+	if err != nil {
+		return fmt.Errorf("delete project member: %w", err)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		DELETE FROM task_assignees 
+		WHERE user_id = $1 
+		  AND task_id IN (SELECT id FROM tasks WHERE project_id = $2)
+	`, targetUserID, projectID)
+	if err != nil {
+		return fmt.Errorf("delete member from task_assignees: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	return nil
 }

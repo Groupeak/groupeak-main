@@ -32,15 +32,15 @@ func parseProjectID(r *http.Request) (int64, bool) {
 
 // POST /api/v1/projects
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	var req models.CreateProjectRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if err := DecodeJSON(w, r, &req); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -48,156 +48,50 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrProjectNameIsRequired):
-			writeError(w, http.StatusBadRequest, err.Error())
+			WriteError(w, http.StatusBadRequest, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			WriteError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"project": project})
+	WriteJSON(w, http.StatusCreated, map[string]interface{}{"project": project})
 }
 
 // GET /api/v1/projects
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	projects, err := h.projectService.ListUserProjects(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal server error")
+		WriteError(w, http.StatusInternalServerError, "internal server error")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"projects": projects})
-}
-
-// POST /api/v1/projects/{projectID}/invites
-func (h *ProjectHandler) InviteMember(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	projectID, ok := parseProjectID(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid projectID")
-		return
-	}
-
-	var req models.InviteMemberRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid json body")
-		return
-	}
-
-	invite, err := h.projectService.InviteMember(r.Context(), userID, projectID, req)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrNotProjectOwner):
-			writeError(w, http.StatusForbidden, err.Error())
-		case errors.Is(err, services.ErrAlreadyProjectMember), errors.Is(err, services.ErrInviteAlreadyPending):
-			writeError(w, http.StatusConflict, err.Error())
-		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusCreated, map[string]interface{}{"invite": invite})
-}
-
-// GET /api/v1/projects/{projectID}/members
-func (h *ProjectHandler) ListMembers(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	projectID, ok := parseProjectID(r)
-	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid projectID")
-		return
-	}
-
-	members, err := h.projectService.ListProjectMembers(r.Context(), userID, projectID)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrNotProjectMember):
-			writeError(w, http.StatusForbidden, err.Error())
-		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{"members": members})
-}
-
-type acceptInviteRequest struct {
-	Token string `json:"token"`
-}
-
-// POST /api/v1/projects/invites/accept
-func (h *ProjectHandler) AcceptInvite(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
-	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
-		return
-	}
-
-	var req acceptInviteRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
-		return
-	}
-
-	invite, err := h.projectService.AcceptInvite(r.Context(), userID, req.Token)
-	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInviteTokenRequired):
-			writeError(w, http.StatusBadRequest, err.Error())
-		case errors.Is(err, services.ErrInviteNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrInviteAlreadyUsed):
-			writeError(w, http.StatusConflict, err.Error())
-		case errors.Is(err, services.ErrInviteEmailMismatch):
-			writeError(w, http.StatusForbidden, err.Error())
-		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
-		}
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{"invite": invite})
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"projects": projects})
 }
 
 // PATCH /api/v1/projects/{projectID}
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	projectID, ok := parseProjectID(r)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid projectID")
+		WriteError(w, http.StatusBadRequest, "invalid projectID")
 		return
 	}
 
 	var req models.PatchProjectRequest
-	if err := decodeJSON(w, r, &req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid JSON body")
+	if err := DecodeJSON(w, r, &req); err != nil {
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -205,32 +99,32 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrProjectNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
+			WriteError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, services.ErrNotProjectOwner):
-			writeError(w, http.StatusForbidden, err.Error())
+			WriteError(w, http.StatusForbidden, err.Error())
 		case errors.Is(err, services.ErrProjectNameIsRequired),
 			errors.Is(err, services.ErrNoFieldsToUpdate):
-			writeError(w, http.StatusBadRequest, err.Error())
+			WriteError(w, http.StatusBadRequest, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			WriteError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
 }
 
 // DELETE /api/v1/projects/{projectID}
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	projectID, ok := parseProjectID(r)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid projectID")
+		WriteError(w, http.StatusBadRequest, "invalid projectID")
 		return
 	}
 
@@ -238,11 +132,11 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrProjectNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
+			WriteError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, services.ErrNotProjectOwner):
-			writeError(w, http.StatusForbidden, err.Error())
+			WriteError(w, http.StatusForbidden, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			WriteError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
@@ -252,15 +146,15 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
 // GET /api/v1/projects/{projectID}
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
-	userID, ok := getUserIDFromContext(r.Context())
+	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	projectID, ok := parseProjectID(r)
 	if !ok {
-		writeError(w, http.StatusBadRequest, "invalid projectID")
+		WriteError(w, http.StatusBadRequest, "invalid projectID")
 		return
 	}
 
@@ -268,14 +162,14 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		switch {
 		case errors.Is(err, services.ErrProjectNotFound):
-			writeError(w, http.StatusNotFound, err.Error())
+			WriteError(w, http.StatusNotFound, err.Error())
 		case errors.Is(err, services.ErrNotProjectMember):
-			writeError(w, http.StatusForbidden, err.Error())
+			WriteError(w, http.StatusForbidden, err.Error())
 		default:
-			writeError(w, http.StatusInternalServerError, "internal server error")
+			WriteError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+	WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
 }

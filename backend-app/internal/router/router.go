@@ -39,14 +39,15 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 			r.Use(middleware.AuthMiddleware(jwtSecret))
 
 			r.Route("/projects", func(r chi.Router) {
-				r.Post("/", projectHandler.CreateProject)                   // POST /api/v1/projects
-				r.Get("/", projectHandler.ListProjects)                     // GET  /api/v1/projects
-				r.Post("/{projectID}/invites", projectHandler.InviteMember) // POST /api/v1/projects/{projectID}/invites
-				r.Get("/{projectID}/members", projectHandler.ListMembers)   // GET  /api/v1/projects/{projectID}/members
-				r.Post("/invites/accept", projectHandler.AcceptInvite)      // POST /api/v1/projects/invites/accept
-				r.Patch("/{projectID}", projectHandler.UpdateProject)       // PATCH /api/v1/projects/{projectID}
-				r.Delete("/{projectID}", projectHandler.DeleteProject)      // DELETE /api/v1/projects/{projectID}
-				r.Get("/{projectID}", projectHandler.GetProject)            // GET /api/v1/projects/{projectID}
+				r.Post("/", projectHandler.CreateProject)                              // POST /api/v1/projects
+				r.Get("/", projectHandler.ListProjects)                                // GET  /api/v1/projects
+				r.Post("/{projectID}/invites", projectHandler.InviteMember)            // POST /api/v1/projects/{projectID}/invites
+				r.Get("/{projectID}/members", projectHandler.ListMembers)              // GET  /api/v1/projects/{projectID}/members
+				r.Delete("/{projectID}/members/{userID}", projectHandler.RemoveMember) // DELETE /api/v1/projects/{projectID}/members/{userID}
+				r.Post("/invites/accept", projectHandler.AcceptInvite)                 // POST /api/v1/projects/invites/accept
+				r.Patch("/{projectID}", projectHandler.UpdateProject)                  // PATCH /api/v1/projects/{projectID}
+				r.Delete("/{projectID}", projectHandler.DeleteProject)                 // DELETE /api/v1/projects/{projectID}
+				r.Get("/{projectID}", projectHandler.GetProject)                       // GET /api/v1/projects/{projectID}
 
 				r.Post("/{projectID}/tasks", taskHandler.CreateTask)                      // POST /api/v1/projects/{projectID}/tasks
 				r.Get("/{projectID}/tasks", taskHandler.ListTasks)                        // GET  /api/v1/projects/{projectID}/tasks

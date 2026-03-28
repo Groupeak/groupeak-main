@@ -36,8 +36,7 @@ type Task struct {
 	Comments    *string      `json:"comments,omitempty"`
 	Status      TaskStatus   `json:"status"`
 	Priority    TaskPriority `json:"priority"`
-	AssigneeID  *int64       `json:"assignee_id,omitempty"`
-	AssigneeIDs []int64      `json:"assignee_ids"`
+	AssigneeIDs []int64      `json:"assignee_ids"` // Только массив исполнителей
 	DueAt       *time.Time   `json:"due_at,omitempty"`
 	CreatedAt   time.Time    `json:"created_at"`
 	UpdatedAt   time.Time    `json:"updated_at"`
@@ -51,6 +50,7 @@ type CreateTaskRequest struct {
 	Priority        TaskPriority `json:"priority"`
 	AssigneeIDs     []int        `json:"assignee_ids"`
 }
+
 type PatchTaskRequest struct {
 	Title           *string       `json:"title,omitempty"`
 	TaskName        *string       `json:"task_name,omitempty"`
@@ -60,9 +60,7 @@ type PatchTaskRequest struct {
 	Status          *TaskStatus   `json:"status,omitempty"`
 	Priority        *TaskPriority `json:"priority,omitempty"`
 
-	AssigneeID      *int64   `json:"assignee_id,omitempty"`
-	ClearAssigneeID bool     `json:"clear_assignee_id,omitempty"`
-	AssigneeIDs     *[]int64 `json:"assignee_ids,omitempty"`
+	AssigneeIDs *[]int64 `json:"assignee_ids,omitempty"` // Только массив
 
 	DueAt      *time.Time `json:"due_at,omitempty"`
 	DueDate    *time.Time `json:"due_date,omitempty"`
