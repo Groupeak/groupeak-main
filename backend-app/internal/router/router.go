@@ -13,7 +13,7 @@ import (
 
 // NewRouter собирает HTTP-маршруты
 func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.ProjectHandler,
-	taskHandler *handlers.TaskHandler, jwtSecret []byte) http.Handler {
+	taskHandler *handlers.TaskHandler, eventHandler *handlers.EventHandler, jwtSecret []byte) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -56,6 +56,9 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Delete("/{projectID}/tasks/{taskID}", taskHandler.DeleteTask)           // DELETE /api/v1/projects/{projectID}/tasks/{taskID}//
 				r.Post("/{projectID}/tasks/{taskID}/submit", taskHandler.SubmitForReview) // POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
 				r.Post("/{projectID}/tasks/{taskID}/review", taskHandler.ReviewTask)      // POST /api/v1/projects/{projectID}/tasks/{taskID}/review
+
+				r.Post("/{projectID}/events", eventHandler.CreateEvent)            // POST /api/v1/projects/{projectID}/events
+				r.Patch("/{projectID}/events/{eventID}", eventHandler.UpdateEvent) // PATCH /api/v1/projects/{projectID}/events/{eventID}
 
 			})
 
