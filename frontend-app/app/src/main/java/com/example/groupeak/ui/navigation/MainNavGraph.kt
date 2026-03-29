@@ -25,6 +25,10 @@ import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
+import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
+import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
+import com.example.groupeak.ui.screens.create_event.CreateEventScreen
+import com.example.groupeak.ui.screens.create_event.CreateEventViewModel
 
 @Composable
 fun MainNavGraph(
@@ -43,10 +47,6 @@ fun MainNavGraph(
                 hasNotifications = true,
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
             )
-        }
-
-        composable(Screen.CreateTask.route) {
-            Text("Создать задачу — заглушка", modifier = Modifier.padding(16.dp))
         }
 
         composable(Screen.Account.route) {
@@ -186,6 +186,62 @@ fun MainNavGraph(
         // Заглушки
         composable(Screen.Tasks.route) {
             Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
+        }
+
+        // Добавить задачу
+        composable(Screen.CreateTask.route) {
+            val vm: CreateTaskViewModel = viewModel()
+            val uiState = vm.uiState
+
+            CreateTaskScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onTitleChange = vm::onTitleChange,
+                onProjectChange = vm::onProjectChange,
+                onDeadlineChange = vm::onDeadlineChange,
+                onParticipantsChange = vm::onParticipantsChange,
+                onDescriptionChange = vm::onDescriptionChange,
+                onPriorityChange = vm::onPriorityChange,
+                onCreateClick = {
+                    vm.onCreateClick {
+                        // Успех: просто вернуться
+                        navController.popBackStack()
+                    }
+                }
+            )
+        }
+
+        // Создание мероприятия
+        composable(Screen.CreateEvent.route) {
+            val vm: CreateEventViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(CreateEventViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return CreateEventViewModel() as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+            val uiState by vm.uiState.collectAsState()
+
+            CreateEventScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onTitleChange = vm::onTitleChange,
+                onProjectChange = vm::onProjectChange,
+                onDateChange = vm::onDateChange,
+                onTimeChange = vm::onTimeChange,
+                onParticipantsChange = vm::onParticipantsChange,
+                onLinkChange = vm::onLinkChange,
+                onDescriptionChange = vm::onDescriptionChange,
+                onCreateClick = {
+                    vm.onCreateClick {
+                        navController.popBackStack()
+                    }
+                }
+            )
         }
 
         // Уведомления

@@ -15,5 +15,6 @@ sealed class Screen(val route: String) {
     object Tasks : Screen("tasks")
     object CreateProject : Screen("create_project")
     object CreateTask : Screen("create_task")
+    object CreateEvent : Screen("create_event")
 
 }

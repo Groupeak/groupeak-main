@@ -88,6 +88,10 @@ fun MainRoot(
                     onCreateTaskClick = {
                         dismissCreateSheet()
                         mainNavController.navigate(Screen.CreateTask.route)
+                    },
+                    onCreateEventClick = {
+                        dismissCreateSheet()
+                        mainNavController.navigate(Screen.CreateEvent.route)
                     }
                 )
             }

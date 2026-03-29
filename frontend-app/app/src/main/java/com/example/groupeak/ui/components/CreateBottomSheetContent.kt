@@ -32,6 +32,7 @@ private val WindowHeight = 47.dp
 fun CreateBottomSheetContent(
     onCreateProjectClick: () -> Unit,
     onCreateTaskClick: () -> Unit,
+    onCreateEventClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
@@ -65,6 +66,15 @@ fun CreateBottomSheetContent(
             title = "Задача",
             subtitle = "Название, дедлайн, приоритет, описание",
             onClick = onCreateTaskClick
+        )
+
+        Spacer(modifier = Modifier.height(22.dp))
+
+        CreateBottomSheetItem(
+            iconRes = R.drawable.ic_event_clock,
+            title = "Мероприятие",
+            subtitle = "Название, дата, время, участники, ссылка",
+            onClick = onCreateEventClick
         )
     }
 }
