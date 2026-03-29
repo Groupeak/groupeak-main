@@ -33,17 +33,20 @@ func main() {
 	authService := services.NewAuthService(sqlDB, cfg.JWTToken)
 	projectService := services.NewProjectService(sqlDB)
 	taskService := services.NewTaskService(sqlDB)
+	eventService := services.NewEventService(sqlDB)
 
 	// 4. Создаём HTTP-хендлеры
 	authHandler := handlers.NewAuthHandler(authService)
 	projectHandler := handlers.NewProjectHandler(projectService)
 	taskHandler := handlers.NewTaskHandler(taskService)
+	eventHandler := handlers.NewEventHandler(eventService)
 
 	// 5. Собираем роутер
 	r := router.NewRouter(
 		authHandler,
 		projectHandler,
 		taskHandler,
+		eventHandler,
 		[]byte(cfg.JWTToken),
 	)
 
