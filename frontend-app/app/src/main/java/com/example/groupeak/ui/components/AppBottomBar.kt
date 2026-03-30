@@ -2,7 +2,13 @@ package com.example.groupeak.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
@@ -20,20 +26,20 @@ import com.example.groupeak.ui.theme.NavButtonActive
 private data class BottomItem(
     val route: String?,
     val label: String,
-    val iconRes: Int
+    val iconRes: Int,
 )
 
 @Composable
 fun AppBottomBar(
     navController: NavHostController,
     selectedRoute: String?,
-    onAddClick: () -> Unit
+    onAddClick: () -> Unit,
 ) {
     val items = listOf(
-        BottomItem(Screen.Account.route, "Главная", R.drawable.ic_home_button),
+        BottomItem(Screen.Home.route, "Главная", R.drawable.ic_home_button),
         BottomItem(Screen.Tasks.route, "Задачи", R.drawable.ic_tasks_button),
         BottomItem(null, "Добавить", R.drawable.ic_add_button),
-        BottomItem(Screen.Profile.route, "Профиль", R.drawable.ic_user_button)
+        BottomItem(Screen.Profile.route, "Профиль", R.drawable.ic_user_button),
     )
 
     Box(
