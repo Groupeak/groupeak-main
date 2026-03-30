@@ -14,31 +14,31 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.groupeak.service_locator.ServiceLocator
-import com.example.groupeak.ui.screens.account.AccountScreen
-import com.example.groupeak.ui.screens.account.AccountViewModel
 import com.example.groupeak.ui.screens.change_email.ChangeEmailScreen
 import com.example.groupeak.ui.screens.change_email.ChangeEmailViewModel
 import com.example.groupeak.ui.screens.change_password.ChangePasswordScreen
 import com.example.groupeak.ui.screens.change_password.ChangePasswordViewModel
+import com.example.groupeak.ui.screens.create_event.CreateEventScreen
+import com.example.groupeak.ui.screens.create_event.CreateEventViewModel
+import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
+import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
 import com.example.groupeak.ui.screens.createproject.CreateProjectScreen
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
+import com.example.groupeak.ui.screens.home.HomeScreen
+import com.example.groupeak.ui.screens.home.HomeViewModel
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
-import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
-import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
-import com.example.groupeak.ui.screens.create_event.CreateEventScreen
-import com.example.groupeak.ui.screens.create_event.CreateEventViewModel
 
 @Composable
 fun MainNavGraph(
     navController: NavHostController,
     modifier: Modifier = Modifier,
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Account.route,
+        startDestination = Screen.Home.route,
         modifier = modifier
     ) {
         composable(Screen.CreateProject.route) {
@@ -49,13 +49,13 @@ fun MainNavGraph(
             )
         }
 
-        composable(Screen.Account.route) {
-            val vm: AccountViewModel = viewModel(
+        composable(Screen.Home.route) {
+            val vm: HomeViewModel = viewModel(
                 factory = object : ViewModelProvider.Factory {
                     override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        if (modelClass.isAssignableFrom(AccountViewModel::class.java)) {
+                        if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
                             @Suppress("UNCHECKED_CAST")
-                            return AccountViewModel(
+                            return HomeViewModel(
                                 ServiceLocator.userRepository,
                                 ServiceLocator.sessionManager,
                             ) as T
@@ -67,14 +67,11 @@ fun MainNavGraph(
 
             val state = vm.uiState
 
-            AccountScreen(
+            HomeScreen(
                 uiState = state,
                 onProfileClick = { navController.navigate(Screen.Profile.route) },
-                onContactClick = { navController.navigate(Screen.Feedback.route) },
-                onChangeEmailClick = { navController.navigate(Screen.ChangeEmail.route) },
-                onChangePasswordClick = { navController.navigate(Screen.ChangePassword.route) },
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onLogoutClick = onLogout
+                onAllTasksClick = { navController.navigate(Screen.Tasks.route) },
             )
         }
 
@@ -103,7 +100,7 @@ fun MainNavGraph(
                 onSaveClick = vm::onSaveClick,
                 onCancelEdit = vm::onCancelEdit,
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onPositionClick = { /* TODO */ },
+                onPositionClick = { },
                 onFullNameChange = vm::onFullNameChange,
                 onBirthDateChange = vm::onBirthDateChange,
                 onPositionChange = vm::onPositionChange,
@@ -177,18 +174,14 @@ fun MainNavGraph(
                 onToggleOldPasswordVisibility = vm::toggleOldPasswordVisibility,
                 onToggleNewPasswordVisibility = vm::toggleNewPasswordVisibility,
                 onToggleConfirmPasswordVisibility = vm::toggleConfirmPasswordVisibility,
-                onNotificationsClick = {
-                    navController.navigate(Screen.Notifications.route)
-                }
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
             )
         }
 
-        // Заглушки
         composable(Screen.Tasks.route) {
             Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
         }
 
-        // Добавить задачу
         composable(Screen.CreateTask.route) {
             val vm: CreateTaskViewModel = viewModel()
             val uiState = vm.uiState
@@ -204,14 +197,12 @@ fun MainNavGraph(
                 onPriorityChange = vm::onPriorityChange,
                 onCreateClick = {
                     vm.onCreateClick {
-                        // Успех: просто вернуться
                         navController.popBackStack()
                     }
                 }
             )
         }
 
-        // Создание мероприятия
         composable(Screen.CreateEvent.route) {
             val vm: CreateEventViewModel = viewModel(
                 factory = object : ViewModelProvider.Factory {
@@ -224,6 +215,7 @@ fun MainNavGraph(
                     }
                 }
             )
+
             val uiState by vm.uiState.collectAsState()
 
             CreateEventScreen(
@@ -244,7 +236,6 @@ fun MainNavGraph(
             )
         }
 
-        // Уведомления
         composable(Screen.Notifications.route) {
             NotificationsScreen(
                 onBack = { navController.popBackStack() }
