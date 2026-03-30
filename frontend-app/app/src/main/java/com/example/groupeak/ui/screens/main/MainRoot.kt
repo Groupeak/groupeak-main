@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainRoot(
-    onLogout: () -> Unit
+    onLogout: () -> Unit,
 ) {
     val mainNavController = rememberNavController()
 
@@ -38,7 +38,7 @@ fun MainRoot(
 
     val selectedRoute = when (currentRoute) {
         Screen.ChangeEmail.route,
-        Screen.ChangePassword.route -> Screen.Account.route
+        Screen.ChangePassword.route -> Screen.Home.route
         else -> currentRoute
     }
 
