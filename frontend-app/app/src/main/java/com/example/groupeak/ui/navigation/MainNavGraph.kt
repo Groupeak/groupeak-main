@@ -25,6 +25,7 @@ import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
+import com.example.groupeak.ui.screens.tasks.TasksScreen
 import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
 import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
 import com.example.groupeak.ui.screens.create_event.CreateEventScreen
@@ -183,9 +184,11 @@ fun MainNavGraph(
             )
         }
 
-        // Заглушки
         composable(Screen.Tasks.route) {
-            Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
+            TasksScreen(
+                onBack = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+            )
         }
 
         // Добавить задачу
