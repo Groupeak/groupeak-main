@@ -29,6 +29,10 @@ import com.example.groupeak.ui.screens.home.HomeViewModel
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
+import com.example.groupeak.ui.screens.tasks.TasksScreen
+import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
+import com.example.groupeak.ui.screens.create_event.CreateEventScreen
+
 
 @Composable
 fun MainNavGraph(
@@ -178,10 +182,15 @@ fun MainNavGraph(
             )
         }
 
+        // Заглушки
         composable(Screen.Tasks.route) {
-            Text("Задачи — заглушка", modifier = Modifier.padding(16.dp))
+            TasksScreen(
+                onBack = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) }
+            )
         }
 
+        // Добавить задачу
         composable(Screen.CreateTask.route) {
             val vm: CreateTaskViewModel = viewModel()
             val uiState = vm.uiState
@@ -197,12 +206,14 @@ fun MainNavGraph(
                 onPriorityChange = vm::onPriorityChange,
                 onCreateClick = {
                     vm.onCreateClick {
+                        // Успех: просто вернуться
                         navController.popBackStack()
                     }
                 }
             )
         }
 
+        // Создание мероприятия
         composable(Screen.CreateEvent.route) {
             val vm: CreateEventViewModel = viewModel(
                 factory = object : ViewModelProvider.Factory {
@@ -236,6 +247,7 @@ fun MainNavGraph(
             )
         }
 
+        // Уведомления
         composable(Screen.Notifications.route) {
             NotificationsScreen(
                 onBack = { navController.popBackStack() }
