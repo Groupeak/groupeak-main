@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"groupeak/internal/models"
+	"log"
 )
 
 var (
@@ -16,6 +17,10 @@ var (
 	ErrCommitTx          = errors.New("failed to commit transaction")
 	ErrUpdateEvent       = errors.New("failed to update event fields")
 	ErrClearParticipants = errors.New("failed to clear old participants")
+	ErrEventNotFound     = errors.New("event not found")
+	ErrDeleteEvent       = errors.New("failed to delete event")
+	ErrGetEvents         = errors.New("failed to get events")
+	ErrNotEventCreator   = errors.New("user is not event creator or project owner")
 )
 
 type EventService struct {
@@ -43,17 +48,26 @@ func (s *EventService) CreateEvent(ctx context.Context, projectID int, req model
 	}
 
 	queryEvent := `
-        INSERT INTO project_events (project_id, title, meeting_url, description, start_at, end_at)
-        VALUES ($1, $2, $3, $4, $5, $6)
+        INSERT INTO project_events 
+            (project_id, title, meeting_url, description, start_at, end_at, created_at, updated_at)
+        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
         RETURNING id, created_at, updated_at`
 
 	err = tx.QueryRowContext(ctx, queryEvent,
-		event.ProjectID, event.Title, event.MeetingURL, event.Description, event.StartAt, event.EndAt,
+		event.ProjectID,
+		event.Title,
+		event.MeetingURL,
+		event.Description,
+		event.StartAt,
+		event.EndAt,
 	).Scan(&event.ID, &event.CreatedAt, &event.UpdatedAt)
+
 	if err != nil {
+		log.Printf("[ERROR] CreateEvent INSERT failed: %+v", err) // ← добавь это
 		return nil, fmt.Errorf("%w: %v", ErrInsertEvent, err)
 	}
 
+	// ←←← остальной код (участники) без изменений ↓
 	if len(req.ParticipantIDs) > 0 {
 		queryParticipant := `INSERT INTO event_participants (event_id, user_id) VALUES ($1, $2)`
 		stmt, err := tx.PrepareContext(ctx, queryParticipant)
@@ -134,4 +148,141 @@ func (s *EventService) UpdateEvent(ctx context.Context, projectID, eventID int, 
 	}
 
 	return nil, nil
+}
+
+func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, eventID int) error {
+	isAuthorized, err := s.isEventAuthorized(ctx, userID, projectID, eventID)
+	if err != nil {
+		return err
+	}
+	if !isAuthorized {
+		return ErrNotEventCreator
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrBeginTx, err)
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `DELETE FROM event_participants WHERE event_id = $1`, eventID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrClearParticipants, err)
+	}
+
+	_, err = tx.ExecContext(ctx, `DELETE FROM project_events WHERE id = $1 AND project_id = $2`, eventID, projectID)
+	if err != nil {
+		return fmt.Errorf("%w: %v", ErrDeleteEvent, err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("%w: %v", ErrCommitTx, err)
+	}
+
+	return nil
+}
+
+func (s *EventService) GetUserEvents(ctx context.Context, userID int) ([]models.Event, error) {
+	query := `
+		SELECT 
+			pe.id, pe.project_id, pe.title, pe.meeting_url, pe.description,
+			pe.start_at, pe.end_at, pe.created_at, pe.updated_at
+		FROM project_events pe
+		INNER JOIN event_participants ep ON ep.event_id = pe.id
+		WHERE ep.user_id = $1
+		ORDER BY pe.start_at ASC
+	`
+
+	rows, err := s.db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrGetEvents, err)
+	}
+	defer rows.Close()
+
+	var events []models.Event
+
+	for rows.Next() {
+		var event models.Event
+		var meetingURL, description sql.NullString
+		var endAt sql.NullTime
+
+		err := rows.Scan(
+			&event.ID,
+			&event.ProjectID,
+			&event.Title,
+			&meetingURL,
+			&description,
+			&event.StartAt,
+			&endAt,
+			&event.CreatedAt,
+			&event.UpdatedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to scan event: %v", err)
+		}
+
+		if meetingURL.Valid {
+			event.MeetingURL = &meetingURL.String
+		}
+		if description.Valid {
+			event.Description = &description.String
+		}
+		if endAt.Valid {
+			event.EndAt = &endAt.Time
+		}
+
+		participantIDs, err := s.getEventParticipants(ctx, event.ID)
+		if err != nil {
+			return nil, err
+		}
+		event.ParticipantIDs = participantIDs
+
+		events = append(events, event)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrGetEvents, err)
+	}
+
+	return events, nil
+}
+
+func (s *EventService) isEventAuthorized(ctx context.Context, userID, projectID, eventID int) (bool, error) {
+	query := `
+		SELECT EXISTS(
+			SELECT 1 FROM event_participants ep
+			WHERE ep.event_id = $1 AND ep.user_id = $2
+		) OR (
+			SELECT owner_id FROM projects WHERE id = $3
+		) = $2
+	`
+
+	var authorized bool
+	err := s.db.QueryRowContext(ctx, query, eventID, userID, projectID).Scan(&authorized)
+	if err != nil {
+		return false, fmt.Errorf("failed to check event authorization: %v", err)
+	}
+
+	return authorized, nil
+}
+
+func (s *EventService) getEventParticipants(ctx context.Context, eventID int) ([]int, error) {
+	query := `SELECT user_id FROM event_participants WHERE event_id = $1 ORDER BY user_id`
+
+	rows, err := s.db.QueryContext(ctx, query, eventID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get participants: %v", err)
+	}
+	defer rows.Close()
+
+	var participants []int
+	for rows.Next() {
+		var userID int
+		if err := rows.Scan(&userID); err != nil {
+			return nil, fmt.Errorf("failed to scan participant: %v", err)
+		}
+		participants = append(participants, userID)
+	}
+
+	return participants, nil
 }
