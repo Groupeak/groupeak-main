@@ -57,14 +57,16 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Post("/{projectID}/tasks/{taskID}/submit", taskHandler.SubmitForReview) // POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
 				r.Post("/{projectID}/tasks/{taskID}/review", taskHandler.ReviewTask)      // POST /api/v1/projects/{projectID}/tasks/{taskID}/review
 
-				r.Post("/{projectID}/events", eventHandler.CreateEvent)            // POST /api/v1/projects/{projectID}/events
-				r.Patch("/{projectID}/events/{eventID}", eventHandler.UpdateEvent) // PATCH /api/v1/projects/{projectID}/events/{eventID}
+				r.Post("/{projectID}/events", eventHandler.CreateEvent)             // POST /api/v1/projects/{projectID}/events
+				r.Patch("/{projectID}/events/{eventID}", eventHandler.UpdateEvent)  // PATCH /api/v1/projects/{projectID}/events/{eventID}
+				r.Delete("/{projectID}/events/{eventID}", eventHandler.DeleteEvent) // DELETE /api/v1/projects/{projectID}/events/{eventID}
 
 			})
 
 			r.Get("/tasks", taskHandler.GetFilteredTasks)        // GET /api/v1/tasks
 			r.Get("/tasks/nearest", taskHandler.GetNearestTasks) // GET /api/v1/tasks/nearest
 			r.Get("/tasks/my", taskHandler.GetMyTasks)           // GET /api/v1/tasks/my
+			r.Get("/events/my", eventHandler.GetUserEvents)      // GET /api/v1/events/my
 
 			r.Route("/user", func(r chi.Router) {
 				r.Post("/change-password", authHandler.ChangePassword) // POST /api/v1/user/change-password
