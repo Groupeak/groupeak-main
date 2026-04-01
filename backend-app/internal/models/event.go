@@ -32,3 +32,8 @@ type UpdateEventRequest struct {
 	EndAt          *time.Time `json:"end_at"`
 	ParticipantIDs []int      `json:"participant_ids"`
 }
+
+type EventWithParticipants struct {
+	Event
+	Participants []int `json:"participants"`
+}
