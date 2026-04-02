@@ -246,7 +246,7 @@ func (s *ProjectService) ListUserProjects(ctx context.Context, userID int64) ([]
 	}
 	defer rows.Close()
 
-	var projects []models.Project
+	projects := make([]models.Project, 0)
 
 	for rows.Next() {
 		var (

@@ -199,7 +199,7 @@ func (s *EventService) GetUserEvents(ctx context.Context, userID int) ([]models.
 	}
 	defer rows.Close()
 
-	var events []models.Event
+	events := make([]models.Event, 0)
 
 	for rows.Next() {
 		var event models.Event
@@ -275,7 +275,7 @@ func (s *EventService) getEventParticipants(ctx context.Context, eventID int) ([
 	}
 	defer rows.Close()
 
-	var participants []int
+	participants := make([]int, 0)
 	for rows.Next() {
 		var userID int
 		if err := rows.Scan(&userID); err != nil {

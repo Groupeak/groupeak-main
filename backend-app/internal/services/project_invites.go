@@ -262,7 +262,7 @@ func (s *ProjectService) ListProjectMembers(ctx context.Context, userID, project
 	}
 	defer rows.Close()
 
-	var members []models.ProjectMemberWithUser
+	members := make([]models.ProjectMemberWithUser, 0)
 
 	for rows.Next() {
 		var (
