@@ -1,25 +1,44 @@
 package com.example.groupeak.ui.screens.create_task
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material3.*
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.LineHeightStyle
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -27,21 +46,6 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.theme.*
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.OffsetMapping
-import androidx.compose.ui.text.input.TransformedText
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
-import androidx.compose.foundation.layout.offset
 
 private object DateVisualTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
@@ -75,17 +79,30 @@ private object DateVisualTransformation : VisualTransformation {
     }
 }
 
+private fun formatShortName(fullName: String): String {
+    val parts = fullName
+        .trim()
+        .split("\\s+".toRegex())
+        .filter { it.isNotBlank() }
+
+    return when (parts.size) {
+        0 -> ""
+        1 -> parts[0]
+        else -> "${parts[0]} ${parts[1].first()}."
+    }
+}
+
 @Composable
 fun CreateTaskScreen(
     uiState: CreateTaskUiState,
     onBackClick: () -> Unit,
     onTitleChange: (String) -> Unit,
-    onProjectChange: (String) -> Unit,
+    onProjectSelected: (Long) -> Unit,
     onDeadlineChange: (String) -> Unit,
-    onParticipantsChange: (String) -> Unit,
+    onToggleParticipant: (Long) -> Unit,
     onDescriptionChange: (String) -> Unit,
     onPriorityChange: (String) -> Unit,
-    onCreateClick: () -> Unit
+    onCreateClick: () -> Unit,
 ) {
     var showProjectDialog by remember { mutableStateOf(false) }
     var showParticipantsDialog by remember { mutableStateOf(false) }
@@ -95,7 +112,6 @@ fun CreateTaskScreen(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Шапка
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -129,7 +145,7 @@ fun CreateTaskScreen(
                         .align(Alignment.CenterEnd)
                         .padding(end = 19.dp)
                         .size(28.dp)
-                        .clickable { /* onNotificationsClick */ },
+                        .clickable { },
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
@@ -141,7 +157,6 @@ fun CreateTaskScreen(
                 }
             }
 
-            // Белый блок
             Box(
                 modifier = Modifier
                     .width(348.dp)
@@ -153,7 +168,6 @@ fun CreateTaskScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment = Alignment.Start
                 ) {
-                    // Название
                     InputFieldWithError(
                         label = "Название",
                         iconRes = R.drawable.ic_task_name,
@@ -165,19 +179,17 @@ fun CreateTaskScreen(
 
                     Spacer(Modifier.height(11.dp))
 
-                    // Проект — выбор через диалог
                     SelectionFieldWithError(
                         label = "Проект",
                         iconRes = R.drawable.ic_project,
                         selectedText = uiState.project,
-                        placeholder = "Выберите проект для задачи",
+                        placeholder = if (uiState.isLoadingProjects) "Загрузка проектов..." else "Выберите проект для задачи",
                         error = uiState.projectError,
                         onClick = { showProjectDialog = true }
                     )
 
                     Spacer(Modifier.height(11.dp))
 
-                    // Дедлайн
                     InputFieldWithError(
                         label = "Дедлайн",
                         iconRes = R.drawable.ic_calendar,
@@ -191,12 +203,17 @@ fun CreateTaskScreen(
 
                     Spacer(Modifier.height(11.dp))
 
-                    // Участники — выбор через диалог
                     SelectionFieldWithError(
                         label = "Участники",
                         iconRes = R.drawable.ic_members,
                         selectedText = uiState.participants,
-                        placeholder = "Выберите участников",
+                        placeholder = if (uiState.selectedProjectId == null) {
+                            "Сначала выберите проект"
+                        } else if (uiState.isLoadingMembers) {
+                            "Загрузка участников..."
+                        } else {
+                            "Выберите участников"
+                        },
                         error = uiState.participantsError,
                         onClick = { showParticipantsDialog = true },
                         isMultiSelect = true
@@ -204,7 +221,6 @@ fun CreateTaskScreen(
 
                     Spacer(Modifier.height(11.dp))
 
-                    // Описание
                     Text(
                         text = "Описание",
                         fontSize = 14.sp,
@@ -247,12 +263,10 @@ fun CreateTaskScreen(
                                     trim = LineHeightStyle.Trim.Both
                                 )
                             ),
-
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Text,
                                 imeAction = ImeAction.Default
                             ),
-
                             decorationBox = { inner ->
                                 if (uiState.description.isEmpty()) {
                                     Text(
@@ -276,7 +290,7 @@ fun CreateTaskScreen(
 
                     if (uiState.descriptionError != null) {
                         Text(
-                            text = uiState.descriptionError!!,
+                            text = uiState.descriptionError,
                             color = Color.Red,
                             fontSize = 12.sp,
                             modifier = Modifier.padding(top = 4.dp, start = 11.dp)
@@ -285,7 +299,6 @@ fun CreateTaskScreen(
 
                     Spacer(Modifier.height(11.dp))
 
-                    // Приоритет
                     Text(
                         text = "Приоритет",
                         fontSize = 14.sp,
@@ -309,23 +322,32 @@ fun CreateTaskScreen(
                         onPriorityChange = onPriorityChange
                     )
 
-                    Spacer(Modifier.height(18.dp))
+                    Spacer(Modifier.height(12.dp))
 
-                    // Кнопка Создать
                     PrimaryButton(
                         modifier = Modifier
                             .width(154.dp)
                             .height(32.dp)
                             .align(Alignment.CenterHorizontally),
-                        text = "Создать",
+                        text = if (uiState.isLoading) "Создание..." else "Создать",
                         onClick = onCreateClick,
                         fontSize = 14.sp
                     )
+
+                    if (!uiState.statusMessage.isNullOrBlank()) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = uiState.statusMessage,
+                            color = if (uiState.statusMessageIsError) Color.Red else Color(0xFF26BC30),
+                            fontSize = 12.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
                 }
             }
         }
 
-        // Диалог выбора проекта
         if (showProjectDialog) {
             Dialog(onDismissRequest = { showProjectDialog = false }) {
                 Box(
@@ -336,20 +358,9 @@ fun CreateTaskScreen(
                     Card(
                         modifier = Modifier.fillMaxSize(),
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF)),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
-                        val projects = listOf(
-                            "SmartHome",
-                            "LinUX",
-                            "Программа для Tahoe",
-                            "Peak.Group",
-                            "ManageGroup",
-                            "Arduino",
-                            "Groupeak",
-                            "Database"
-                        )
-
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -368,56 +379,86 @@ fun CreateTaskScreen(
                                     .align(Alignment.CenterHorizontally)
                             )
 
-                            // Скроллящийся список проектов
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(380.dp)
-                            ) {
-                                itemsIndexed(projects) { index, project ->
-                                    Row(
+                            when {
+                                uiState.isLoadingProjects -> {
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable {
-                                                onProjectChange(project)
-                                                showProjectDialog = false
-                                            }
-                                            .padding(vertical = 16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .height(380.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(color = BluePrimary300)
+                                    }
+                                }
+
+                                uiState.availableProjects.isEmpty() -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(380.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = project,
-                                            fontSize = 20.sp,
+                                            text = "Нет доступных проектов",
+                                            fontSize = 16.sp,
                                             fontFamily = OnestFontFamily,
-                                            fontWeight = FontWeight.Normal,
-                                            color = GroupeakDarkBlue,
-                                            modifier = Modifier
-                                                .width(220.dp)
-                                                .padding(start = 9.dp)
-                                        )
-
-                                        Spacer(Modifier.weight(1f))
-
-                                        Icon(
-                                            painter = painterResource(
-                                                id = if (uiState.project == project)
-                                                    R.drawable.ic_selected_circle
-                                                else
-                                                    R.drawable.ic_circle
-                                            ),
-                                            contentDescription = null,
-                                            tint = Color.Unspecified,
-                                            modifier = Modifier.size(40.dp)
+                                            color = Gray650,
                                         )
                                     }
+                                }
 
-                                    if (index != projects.lastIndex) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(1.dp)
-                                                .background(Color(0xFFB0B3C7))
-                                        )
+                                else -> {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(380.dp)
+                                    ) {
+                                        itemsIndexed(uiState.availableProjects) { index, project ->
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        onProjectSelected(project.id)
+                                                        showProjectDialog = false
+                                                    }
+                                                    .padding(vertical = 16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = project.name,
+                                                    fontSize = 20.sp,
+                                                    fontFamily = OnestFontFamily,
+                                                    fontWeight = FontWeight.Normal,
+                                                    color = GroupeakDarkBlue,
+                                                    modifier = Modifier
+                                                        .width(220.dp)
+                                                        .padding(start = 9.dp)
+                                                )
+
+                                                Spacer(Modifier.weight(1f))
+
+                                                Icon(
+                                                    painter = painterResource(
+                                                        id = if (uiState.selectedProjectId == project.id)
+                                                            R.drawable.ic_selected_circle
+                                                        else
+                                                            R.drawable.ic_circle
+                                                    ),
+                                                    contentDescription = null,
+                                                    tint = Color.Unspecified,
+                                                    modifier = Modifier.size(40.dp)
+                                                )
+                                            }
+
+                                            if (index != uiState.availableProjects.lastIndex) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(1.dp)
+                                                        .background(Color(0xFFB0B3C7))
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -429,7 +470,6 @@ fun CreateTaskScreen(
             }
         }
 
-        // Диалог выбора участников
         if (showParticipantsDialog) {
             Dialog(onDismissRequest = { showParticipantsDialog = false }) {
                 Box(
@@ -440,20 +480,9 @@ fun CreateTaskScreen(
                     Card(
                         modifier = Modifier.fillMaxSize(),
                         shape = RoundedCornerShape(18.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF)),
+                        colors = CardDefaults.cardColors(containerColor = Color.White),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
-                        val members = listOf(
-                            "Михаил Д." to "Frontend",
-                            "Василий П." to "Backend",
-                            "Андрей П." to "Designer",
-                            "Алексей В." to "PR",
-                            "Юрий X." to "Full-stack",
-                            "Виталий П." to "Frontend",
-                            "Денис К." to "Backend",
-                            "Вячеслав Б." to "Backend"
-                        )
-
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -472,79 +501,114 @@ fun CreateTaskScreen(
                                     .align(Alignment.CenterHorizontally)
                             )
 
-                            // Скроллящийся список участников
-                            LazyColumn(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(380.dp)
-                            ) {
-                                itemsIndexed(members) { index, (name, role) ->
-                                    val isSelected = uiState.participants.contains(name, ignoreCase = true)
-
-                                    Row(
+                            when {
+                                uiState.selectedProjectId == null -> {
+                                    Box(
                                         modifier = Modifier
                                             .fillMaxWidth()
-                                            .clickable {
-                                                val currentList = uiState.participants
-                                                    .split(", ")
-                                                    .filter { it.isNotBlank() }
-                                                    .toMutableList()
-
-                                                if (isSelected) {
-                                                    currentList.removeAll { it.equals(name, ignoreCase = true) }
-                                                } else {
-                                                    currentList.add(name)
-                                                }
-
-                                                onParticipantsChange(currentList.joinToString(", "))
-                                            }
-                                            .padding(vertical = 16.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                            .height(380.dp),
+                                        contentAlignment = Alignment.Center
                                     ) {
                                         Text(
-                                            text = name,
-                                            fontSize = 20.sp,
-                                            fontFamily = OnestFontFamily,
-                                            fontWeight = FontWeight.Normal,
-                                            color = GroupeakDarkBlue,
-                                            modifier = Modifier
-                                                .width(120.dp)
-                                                .padding(start = 9.dp)
-                                        )
-
-                                        Text(
-                                            text = role,
-                                            fontSize = 20.sp,
+                                            text = "Сначала выберите проект",
+                                            fontSize = 16.sp,
                                             fontFamily = OnestFontFamily,
                                             color = Gray650,
-                                            textAlign = TextAlign.Center,
-                                            modifier = Modifier
-                                                .width(100.dp)
-                                                .wrapContentWidth(Alignment.CenterHorizontally)
-                                        )
-
-                                        Spacer(Modifier.weight(1f))
-
-                                        Icon(
-                                            painter = painterResource(
-                                                id = if (isSelected)
-                                                    R.drawable.ic_selected_check_mark
-                                                else
-                                                    R.drawable.ic_check_mark
-                                            ),
-                                            contentDescription = null,
-                                            tint = Color.Unspecified,
-                                            modifier = Modifier.size(40.dp)
                                         )
                                     }
+                                }
 
-                                    if (index != members.lastIndex) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .height(1.dp)
-                                                .background(Color(0xFFB0B3C7))
+                                uiState.isLoadingMembers -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(380.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        CircularProgressIndicator(color = BluePrimary300)
+                                    }
+                                }
+
+                                uiState.availableMembers.isEmpty() -> {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(380.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "В этом проекте нет участников",
+                                            fontSize = 16.sp,
+                                            fontFamily = OnestFontFamily,
+                                            color = Gray650,
                                         )
+                                    }
+                                }
+
+                                else -> {
+                                    LazyColumn(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(380.dp)
+                                    ) {
+                                        itemsIndexed(uiState.availableMembers) { index, member ->
+                                            val isSelected = uiState.selectedParticipantIds.contains(member.userId)
+
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        onToggleParticipant(member.userId)
+                                                    }
+                                                    .padding(vertical = 16.dp),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Text(
+                                                    text = formatShortName(member.fullName),
+                                                    fontSize = 20.sp,
+                                                    fontFamily = OnestFontFamily,
+                                                    fontWeight = FontWeight.Normal,
+                                                    color = GroupeakDarkBlue,
+                                                    modifier = Modifier
+                                                        .width(120.dp)
+                                                        .padding(start = 9.dp)
+                                                )
+
+                                                Text(
+                                                    text = member.position,
+                                                    fontSize = 20.sp,
+                                                    fontFamily = OnestFontFamily,
+                                                    color = Gray650,
+                                                    textAlign = TextAlign.Center,
+                                                    modifier = Modifier
+                                                        .width(100.dp)
+                                                        .wrapContentWidth(Alignment.CenterHorizontally)
+                                                )
+
+                                                Spacer(Modifier.weight(1f))
+
+                                                Icon(
+                                                    painter = painterResource(
+                                                        id = if (isSelected)
+                                                            R.drawable.ic_selected_check_mark
+                                                        else
+                                                            R.drawable.ic_check_mark
+                                                    ),
+                                                    contentDescription = null,
+                                                    tint = Color.Unspecified,
+                                                    modifier = Modifier.size(40.dp)
+                                                )
+                                            }
+
+                                            if (index != uiState.availableMembers.lastIndex) {
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(1.dp)
+                                                        .background(Color(0xFFB0B3C7))
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -554,41 +618,6 @@ fun CreateTaskScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun CustomCheckbox(
-    checked: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .size(24.dp)
-            .clip(RoundedCornerShape(4.dp))
-            .background(if (checked) BluePrimary300 else Color.Transparent)
-            .border(
-                width = 1.dp,
-                color = if (checked) BluePrimary300 else GroupeakLightGray,
-                shape = RoundedCornerShape(4.dp)
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        if (checked) {
-            Icon(
-                painter = painterResource(R.drawable.ic_selected_check_mark),
-                contentDescription = null,
-                tint = Color.White,
-                modifier = Modifier.size(18.dp)
-            )
-        } else {
-            Icon(
-                painter = painterResource(R.drawable.ic_check_mark),
-                contentDescription = null,
-                tint = Color.Transparent, // или другой цвет, если хочешь видеть контур
-                modifier = Modifier.size(18.dp)
-            )
         }
     }
 }
@@ -685,7 +714,6 @@ private fun InputFieldWithError(
     }
 }
 
-// Вспомогательная функция для форматирования участников
 private fun formatParticipantsText(participants: String, placeholder: String): AnnotatedString {
     val list = participants.split(", ").filter { it.isNotBlank() }
     return when {
@@ -757,7 +785,6 @@ private fun SelectionFieldWithError(
 
             Spacer(Modifier.width(8.dp))
 
-            // Форматируем текст только для участников
             val displayText = if (isMultiSelect) {
                 formatParticipantsText(selectedText, placeholder)
             } else {
@@ -796,7 +823,6 @@ private fun SelectionFieldWithError(
     }
 }
 
-// Внутренний enum для анимации (не меняет внешний API)
 private enum class PriorityLevel { LOW, MEDIUM, HIGH }
 
 @Composable
@@ -806,7 +832,6 @@ private fun PrioritySelector(
 ) {
     val segmentWidth = 328.dp / 3
 
-    // Конвертация String → enum для анимации
     val priorityEnum = when (selectedPriority) {
         "Низкий" -> PriorityLevel.LOW
         "Средний" -> PriorityLevel.MEDIUM
@@ -822,7 +847,6 @@ private fun PrioritySelector(
         null -> 0
     }
 
-    // Мгновенный переход при первом выборе
     val shouldSnapToFirstSelection = previousPriority == null && priorityEnum != null
 
     val animatedOffset by animateDpAsState(
@@ -864,7 +888,6 @@ private fun PrioritySelector(
             .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
             .clip(RoundedCornerShape(18.dp))
     ) {
-        // Анимированная подложка
         Box(
             modifier = Modifier
                 .offset(x = animatedOffset)
@@ -874,7 +897,6 @@ private fun PrioritySelector(
                 .background(animatedColor.copy(alpha = animatedAlpha))
         )
 
-        // Кнопки поверх
         Row(modifier = Modifier.fillMaxSize()) {
             PrioritySegmentItem(
                 text = "Низкий",
@@ -905,7 +927,6 @@ private fun PrioritySegmentItem(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    // Анимация цвета текста
     val animatedTextColor by animateColorAsState(
         targetValue = if (selected) Color.White else GroupeakDarkBlue,
         animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),

@@ -1,6 +1,9 @@
 package com.example.groupeak.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.collectAsState
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -8,6 +11,7 @@ import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navigation
 import com.example.groupeak.service_locator.ServiceLocator
 import com.example.groupeak.ui.screens.login.LoginScreen
@@ -38,22 +42,33 @@ class LoginViewModelFactory : ViewModelProvider.Factory {
 }
 
 @Composable
-fun RootNavGraph(rootNavController: NavHostController) {
+fun RootNavGraph(
+    rootNavController: NavHostController,
+    startDestination: String,
+) {
+    val token by ServiceLocator.sessionManager.token.collectAsState()
+    val navBackStackEntry by rootNavController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+
+    LaunchedEffect(token, currentRoute) {
+        if (token.isNullOrBlank() && currentRoute == Graph.MAIN) {
+            rootNavController.navigate(Graph.AUTH) {
+                popUpTo(rootNavController.graph.id) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
+
     NavHost(
         navController = rootNavController,
-        startDestination = Graph.AUTH
+        startDestination = startDestination,
     ) {
         authGraph(rootNavController)
 
         composable(Graph.MAIN) {
             MainRoot(
-
                 onLogout = {
                     ServiceLocator.sessionManager.clear()
-                    rootNavController.navigate(Graph.AUTH) {
-                        popUpTo(Graph.MAIN) { inclusive = true }
-                        launchSingleTop = true
-                    }
                 }
             )
         }
@@ -63,12 +78,12 @@ fun RootNavGraph(rootNavController: NavHostController) {
 private fun NavGraphBuilder.authGraph(rootNavController: NavHostController) {
     navigation(
         startDestination = Screen.Start.route,
-        route = Graph.AUTH
+        route = Graph.AUTH,
     ) {
         composable(Screen.Start.route) {
             StartScreen(
                 onLoginClick = { rootNavController.navigate(Screen.Login.route) },
-                onRegisterClick = { rootNavController.navigate(Screen.Register.route) }
+                onRegisterClick = { rootNavController.navigate(Screen.Register.route) },
             )
         }
 
@@ -89,7 +104,7 @@ private fun NavGraphBuilder.authGraph(rootNavController: NavHostController) {
                             launchSingleTop = true
                         }
                     }
-                }
+                },
             )
         }
 
@@ -110,9 +125,10 @@ private fun NavGraphBuilder.authGraph(rootNavController: NavHostController) {
                     registerViewModel.onRegisterClick {
                         rootNavController.navigate(Screen.Login.route) {
                             popUpTo(Screen.Register.route) { inclusive = true }
+                            launchSingleTop = true
                         }
                     }
-                }
+                },
             )
         }
     }

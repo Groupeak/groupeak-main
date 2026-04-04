@@ -4,8 +4,12 @@ import android.content.Context
 import com.example.groupeak.data.local.SessionManager
 import com.example.groupeak.data.remote.api.ApiClient
 import com.example.groupeak.data.remote.repository.AuthRepositoryImpl
+import com.example.groupeak.data.remote.repository.ProjectRepositoryImpl
+import com.example.groupeak.data.remote.repository.TaskRepositoryImpl
 import com.example.groupeak.data.remote.repository.UserRepositoryImpl
 import com.example.groupeak.domain.repository.AuthRepository
+import com.example.groupeak.domain.repository.ProjectRepository
+import com.example.groupeak.domain.repository.TaskRepository
 import com.example.groupeak.domain.repository.UserRepository
 
 object ServiceLocator {
@@ -21,6 +25,16 @@ object ServiceLocator {
     val userRepository: UserRepository by lazy {
         ApiClient.checkInitialized()
         UserRepositoryImpl(ApiClient.userApi, sessionManager)
+    }
+
+    val projectRepository: ProjectRepository by lazy {
+        ApiClient.checkInitialized()
+        ProjectRepositoryImpl(ApiClient.projectApi, sessionManager)
+    }
+
+    val taskRepository: TaskRepository by lazy {
+        ApiClient.checkInitialized()
+        TaskRepositoryImpl(ApiClient.taskApi)
     }
 
     fun init(context: Context) {

@@ -20,7 +20,9 @@ class UserRepositoryImpl(
             sessionManager.updateUser(resp.user)
             Result.success(resp.user)
         } catch (e: Throwable) {
-            Result.failure(parseApiError(e))
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
         }
     }
 
@@ -47,7 +49,9 @@ class UserRepositoryImpl(
 
             Result.success(resp.user)
         } catch (e: Throwable) {
-            Result.failure(parseApiError(e))
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
         }
     }
 
@@ -58,7 +62,9 @@ class UserRepositoryImpl(
             sessionManager.updateUser(resp.user)
             Result.success(resp.user)
         } catch (e: Throwable) {
-            Result.failure(parseApiError(e))
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
         }
     }
 
@@ -79,7 +85,9 @@ class UserRepositoryImpl(
             sessionManager.updateUser(resp.user)
             Result.success(resp.user)
         } catch (e: Throwable) {
-            Result.failure(parseApiError(e))
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
         }
     }
 }

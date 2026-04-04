@@ -22,7 +22,6 @@ class SessionManager(
     context: Context,
 ) {
     private val appContext = context.applicationContext
-
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val _token = MutableStateFlow<String?>(null)
@@ -31,14 +30,17 @@ class SessionManager(
     private val _user = MutableStateFlow<UserDto?>(null)
     val user: StateFlow<UserDto?> = _user.asStateFlow()
 
+    private val _isRestored = MutableStateFlow(false)
+    val isRestored: StateFlow<Boolean> = _isRestored.asStateFlow()
+
     init {
-        // Восстанавливаем токен из DataStore
         scope.launch {
             appContext.dataStore.data
                 .map { prefs -> prefs[KEY_TOKEN] }
                 .distinctUntilChanged()
                 .collect { storedToken ->
                     _token.value = storedToken
+                    _isRestored.value = true
                 }
         }
     }

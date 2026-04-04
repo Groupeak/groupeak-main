@@ -1,4 +1,3 @@
-
 package com.example.groupeak.ui.screens.tasks
 
 import androidx.compose.animation.AnimatedContent
@@ -41,23 +40,23 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.clipToBounds
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -67,14 +66,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import com.example.groupeak.R
+import com.example.groupeak.data.remote.dto.TaskDto
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.theme.BluePrimary300
 import com.example.groupeak.ui.theme.OnestFontFamily
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
-private enum class TasksTab { ACTIVE, INACTIVE }
 private enum class TaskBucket { CURRENT, REVIEW, INACTIVE }
 
 private enum class TaskPriority(val title: String, val color: Color) {
@@ -90,11 +93,12 @@ private enum class InactiveStatus(val title: String, val color: Color) {
 
 private data class TaskParticipantUi(
     val name: String,
-    val role: String
+    val role: String,
 )
 
 private data class TaskUi(
-    val id: Int,
+    val id: Long,
+    val projectId: Long,
     val title: String,
     val project: String,
     val priority: TaskPriority,
@@ -102,10 +106,13 @@ private data class TaskUi(
     val detailsDeadline: String = deadline,
     val description: String = "",
     val bucket: TaskBucket,
+    val backendStatus: String,
     val checked: Boolean = false,
     val inactiveStatus: InactiveStatus? = null,
-    val participants: List<TaskParticipantUi> = emptyList()
+    val participants: List<TaskParticipantUi> = emptyList(),
 )
+
+private val currentStatuses = setOf("todo", "in_progress", "postponed")
 
 private val NotifHitBoxSize = 28.dp
 private val NotifIconSize = 22.dp
@@ -117,174 +124,130 @@ private val DetailFieldIconSpacing = 14.dp
 
 @Composable
 fun TasksScreen(
+    uiState: TasksUiState,
     onBack: () -> Unit,
     onNotificationsClick: () -> Unit,
-    modifier: Modifier = Modifier
+    onTabSelected: (TasksTab) -> Unit,
+    onApplyFilters: (Long?, TaskPriorityFilter?) -> Unit,
+    onResetFilters: () -> Unit,
+    onTaskClick: (Long, Long) -> Unit,
+    onDismissTaskDetails: () -> Unit,
+    onSubmitTask: (Long, Long) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
-    var selectedTab by remember { mutableStateOf(TasksTab.ACTIVE) }
-    var showFilterDialog by remember { mutableStateOf(false) }
-    var selectedProjectFilter by remember { mutableStateOf<String?>(null) }
-    var selectedPriorityFilter by remember { mutableStateOf<TaskPriority?>(null) }
-    var selectedTask by remember { mutableStateOf<TaskUi?>(null) }
-    var completingTaskId by remember { mutableStateOf<Int?>(null) }
-    var recentlyMovedTaskId by remember { mutableStateOf<Int?>(null) }
     val scope = rememberCoroutineScope()
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var recentlyMovedTaskId by remember { mutableStateOf<Long?>(null) }
+    var previousStatuses by remember { mutableStateOf<Map<Long, String>>(emptyMap()) }
+    var transitioningTaskIds by remember { mutableStateOf<Set<Long>>(emptySet()) }
+    var optimisticReviewTasks by remember { mutableStateOf<Map<Long, TaskUi>>(emptyMap()) }
 
-    val tasks = remember {
-        mutableStateListOf(
-            TaskUi(
-                id = 1,
-                title = "Подготовить отчет по работе",
-                project = "LinUX",
-                priority = TaskPriority.HIGH,
-                deadline = "22.02.26",
-                detailsDeadline = "22.02.2026",
-                description = "Требуется дополнить и отправить на проверку отчет, с новой информацией по работе",
-                bucket = TaskBucket.CURRENT,
-                participants = listOf(
-                    TaskParticipantUi("Дупло Вячеслав", "Автор задачи"),
-                    TaskParticipantUi("Петров Василий", "Frontend"),
-                    TaskParticipantUi("Скляров Мирослав", "Designer"),
-                    TaskParticipantUi("Иванов Артем", "Backend"),
-                    TaskParticipantUi("Сидоров Максим", "QA"),
-                    TaskParticipantUi("Кузнецов Илья", "Manager"),
-                    TaskParticipantUi("Михайлова Анна", "Analyst"),
-                    TaskParticipantUi("Орлов Кирилл", "DevOps"),
-                    TaskParticipantUi("Фролов Денис", "iOS"),
-                    TaskParticipantUi("Егорова Мария", "Android"),
-                    TaskParticipantUi("Новиков Павел", "Research"),
-                    TaskParticipantUi("Семенов Роман", "Support"),
-                    TaskParticipantUi("Тарасова Виктория", "HR")
-                )
-            ),
-            TaskUi(
-                id = 2,
-                title = "Проанализировать целевую аудиторию",
-                project = "Fortnuts",
-                priority = TaskPriority.MEDIUM,
-                deadline = "25.02.26",
-                bucket = TaskBucket.CURRENT
-            ),
-            TaskUi(
-                id = 3,
-                title = "Проверить код на корректность по тестам",
-                project = "МПО ВЭМ",
-                priority = TaskPriority.LOW,
-                deadline = "28.02.26",
-                bucket = TaskBucket.CURRENT
-            ),
-            TaskUi(
-                id = 4,
-                title = "Придумать задачу для ботанов",
-                project = "МПО ВЭМ",
-                priority = TaskPriority.HIGH,
-                deadline = "28.02.26",
-                bucket = TaskBucket.CURRENT
-            ),
-            TaskUi(
-                id = 5,
-                title = "Сверить бухгалтерию за 4-ый квартал",
-                project = "iMo.Studio",
-                priority = TaskPriority.LOW,
-                deadline = "08.03.26",
-                bucket = TaskBucket.CURRENT
-            ),
-            TaskUi(
-                id = 6,
-                title = "Сверить бухгалтерию за 4-ый квартал",
-                project = "iMo.Studio",
-                priority = TaskPriority.LOW,
-                deadline = "08.03.26",
-                bucket = TaskBucket.REVIEW,
-                checked = true
-            ),
-            TaskUi(
-                id = 7,
-                title = "Подготовить отчет по работе",
-                project = "LinUX",
-                priority = TaskPriority.HIGH,
-                deadline = "15.02.26",
-                bucket = TaskBucket.INACTIVE,
-                inactiveStatus = InactiveStatus.DONE
-            ),
-            TaskUi(
-                id = 8,
-                title = "Проанализировать целевую аудиторию",
-                project = "Fortnuts",
-                priority = TaskPriority.MEDIUM,
-                deadline = "25.02.26",
-                bucket = TaskBucket.INACTIVE,
-                inactiveStatus = InactiveStatus.OVERDUE
-            ),
-            TaskUi(
-                id = 9,
-                title = "Проверить код на корректность по тестам",
-                project = "МПО ВЭМ",
-                priority = TaskPriority.LOW,
-                deadline = "28.02.26",
-                bucket = TaskBucket.INACTIVE,
-                inactiveStatus = InactiveStatus.DONE
-            ),
-            TaskUi(
-                id = 10,
-                title = "Придумать задачу для ботанов",
-                project = "МПО ВЭМ",
-                priority = TaskPriority.HIGH,
-                deadline = "28.02.26",
-                bucket = TaskBucket.INACTIVE,
-                inactiveStatus = InactiveStatus.DONE
-            ),
-            TaskUi(
-                id = 11,
-                title = "Сверить бухгалтерию за 4-ый квартал",
-                project = "iMo.Studio",
-                priority = TaskPriority.LOW,
-                deadline = "08.03.26",
-                bucket = TaskBucket.INACTIVE,
-                inactiveStatus = InactiveStatus.OVERDUE
-            )
-        )
-    }
+    LaunchedEffect(uiState.tasks) {
+        val newStatuses = uiState.tasks.associate { it.id to it.status }
 
-    fun moveTaskToReview(taskId: Int) {
-        if (completingTaskId != null) return
+        val movedTaskId = newStatuses.keys.firstOrNull { taskId ->
+            taskId !in optimisticReviewTasks.keys &&
+                    previousStatuses[taskId] in currentStatuses &&
+                    newStatuses[taskId] == "in_review"
+        }
 
-        completingTaskId = taskId
+        previousStatuses = newStatuses
 
-        scope.launch {
-            delay(260)
-
-            val index = tasks.indexOfFirst { it.id == taskId }
-            if (index != -1) {
-                tasks[index] = tasks[index].copy(
-                    checked = true,
-                    bucket = TaskBucket.REVIEW
-                )
-                recentlyMovedTaskId = taskId
-            }
-
-            completingTaskId = null
-
+        if (movedTaskId != null) {
+            recentlyMovedTaskId = movedTaskId
             delay(650)
-            if (recentlyMovedTaskId == taskId) {
+            if (recentlyMovedTaskId == movedTaskId) {
                 recentlyMovedTaskId = null
             }
         }
     }
 
-    fun matchesFilter(task: TaskUi): Boolean {
-        val projectMatches = selectedProjectFilter == null || task.project == selectedProjectFilter
-        val priorityMatches = selectedPriorityFilter == null || task.priority == selectedPriorityFilter
-        return projectMatches && priorityMatches
+    LaunchedEffect(
+        uiState.tasks,
+        uiState.isSubmittingTaskId,
+        uiState.statusMessage,
+        uiState.statusMessageIsError,
+    ) {
+        if (transitioningTaskIds.isEmpty() && optimisticReviewTasks.isEmpty()) return@LaunchedEffect
+
+        val confirmedReviewIds = uiState.tasks
+            .filter { it.status == "in_review" }
+            .map(TaskDto::id)
+            .toSet()
+
+        val finishedTransitionIds = transitioningTaskIds.filter { it in confirmedReviewIds }.toSet()
+
+        when {
+            finishedTransitionIds.isNotEmpty() -> {
+                transitioningTaskIds = transitioningTaskIds - finishedTransitionIds
+                optimisticReviewTasks = optimisticReviewTasks - finishedTransitionIds
+            }
+
+            uiState.isSubmittingTaskId == null && uiState.statusMessageIsError -> {
+                transitioningTaskIds = emptySet()
+                optimisticReviewTasks = emptyMap()
+            }
+        }
     }
 
-    val hasAppliedFilters = selectedProjectFilter != null || selectedPriorityFilter != null
+    val selectedProjectName = uiState.projects
+        .firstOrNull { it.id == uiState.selectedProjectId }
+        ?.projectName
+    val availableProjects = uiState.projects
+        .map { it.projectName }
+        .distinct()
+    val hasAppliedFilters = uiState.selectedProjectId != uiState.scopedProjectId || uiState.selectedPriority != null
     val isFilterHighlighted = showFilterDialog || hasAppliedFilters
+    val overdueTaskIds = uiState.tasks
+        .filter { it.status != "done" && it.isOverdue() }
+        .map(TaskDto::id)
+        .toSet()
+    val inlineErrorMessage = uiState.statusMessage
+        ?.takeIf { uiState.statusMessageIsError && uiState.tasks.isNotEmpty() }
+    val emptyStateMessage = uiState.statusMessage
+        ?.takeIf { uiState.statusMessageIsError }
+        ?: "Задачи не найдены"
 
-    val availableProjects = tasks.map { it.project }.distinct()
-    val currentTasks = tasks.filter { it.bucket == TaskBucket.CURRENT }.filter(::matchesFilter)
-    val reviewTasks = tasks.filter { it.bucket == TaskBucket.REVIEW }.filter(::matchesFilter)
-    val inactiveTasks = tasks.filter { it.bucket == TaskBucket.INACTIVE }.filter(::matchesFilter)
+    val taskOrderById = uiState.tasks.withIndex().associate { it.value.id to it.index }
+
+    val currentTasks = uiState.tasks
+        .filter { it.status in currentStatuses && it.id !in overdueTaskIds }
+        .map { it.toTaskUi(uiState.projectNamesById) }
+
+    val reviewTasks = uiState.tasks
+        .filter { it.status == "in_review" && it.id !in overdueTaskIds }
+        .map { it.toTaskUi(uiState.projectNamesById) }
+
+    val reviewTaskIds = reviewTasks.map(TaskUi::id).toSet()
+    val displayedReviewTasks = buildList {
+        optimisticReviewTasks
+            .values
+            .filter { it.id !in reviewTaskIds }
+            .sortedBy { taskOrderById[it.id] ?: Int.MAX_VALUE }
+            .forEach(::add)
+        addAll(reviewTasks)
+    }
+    val visibleCurrentCount = currentTasks.count { it.id !in transitioningTaskIds }
+
+    val inactiveTasks = uiState.tasks.mapNotNull { task ->
+        when {
+            task.status == "done" -> task.toTaskUi(
+                projectNames = uiState.projectNamesById,
+                bucket = TaskBucket.INACTIVE,
+                inactiveStatus = InactiveStatus.DONE,
+            )
+
+            task.id in overdueTaskIds -> task.toTaskUi(
+                projectNames = uiState.projectNamesById,
+                bucket = TaskBucket.INACTIVE,
+                inactiveStatus = InactiveStatus.OVERDUE,
+            )
+
+            else -> null
+        }
+    }
+
+    val selectedTask = uiState.selectedTaskDetails?.toTaskUi()
 
     GroupeakBackground {
         Column(modifier = modifier.fillMaxSize()) {
@@ -292,129 +255,190 @@ fun TasksScreen(
                 title = "Список задач",
                 hasNotifications = true,
                 onBackClick = onBack,
-                onNotificationsClick = onNotificationsClick
+                onNotificationsClick = onNotificationsClick,
             )
 
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(start = 20.dp, end = 20.dp, bottom = 19.dp),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 TasksTabs(
-                    selectedTab = selectedTab,
-                    onTabSelected = { selectedTab = it }
+                    selectedTab = uiState.selectedTab,
+                    onTabSelected = onTabSelected,
                 )
 
                 Spacer(modifier = Modifier.width(21.dp))
 
                 FilterButton(
                     isActive = isFilterHighlighted,
-                    onClick = { showFilterDialog = true }
+                    onClick = { showFilterDialog = true },
                 )
             }
+
+            inlineErrorMessage?.let { message ->
+                Text(
+                    text = message,
+                    fontSize = 14.sp,
+                    lineHeight = 18.sp,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = Color(0xFFD92D20),
+                    modifier = Modifier.padding(start = 31.dp, end = 24.dp, bottom = 12.dp),
+                )
+            }
+
 
             if (showFilterDialog) {
                 TasksFilterDialog(
                     availableProjects = availableProjects,
-                    initialProject = selectedProjectFilter,
-                    initialPriority = selectedPriorityFilter,
+                    initialProject = selectedProjectName,
+                    initialPriority = uiState.selectedPriority?.toUiPriority(),
+                    allowProjectSelection = !uiState.isProjectScoped,
                     onDismiss = { showFilterDialog = false },
-                    onApply = { project, priority ->
-                        selectedProjectFilter = project
-                        selectedPriorityFilter = priority
+                    onApply = { projectName, priority ->
+                        val projectId = uiState.projects
+                            .firstOrNull { it.projectName == projectName }
+                            ?.id
+
+                        onApplyFilters(
+                            projectId,
+                            priority?.toFilter(),
+                        )
                         showFilterDialog = false
                     },
                     onReset = {
-                        selectedProjectFilter = null
-                        selectedPriorityFilter = null
+                        onResetFilters()
                         showFilterDialog = false
-                    }
+                    },
                 )
             }
 
-            selectedTask?.let { task ->
-                TaskDetailsDialog(
-                    task = task,
-                    onDismiss = { selectedTask = null }
-                )
+            if (uiState.isTaskDetailsVisible) {
+                if (uiState.isLoadingTaskDetails) {
+                    TaskDetailsLoadingDialog(onDismiss = onDismissTaskDetails)
+                } else if (selectedTask != null) {
+                    TaskDetailsDialog(
+                        task = selectedTask,
+                        onDismiss = onDismissTaskDetails,
+                    )
+                }
             }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                contentPadding = PaddingValues(bottom = 24.dp)
-            ) {
-                if (selectedTab == TasksTab.ACTIVE) {
-                    item {
-                        SectionTitle("Текущие", currentTasks.size)
-                    }
+            if (uiState.isLoading && uiState.tasks.isEmpty()) {
+                TasksListLoadingState()
+            } else {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 24.dp),
+                ) {
+                    if (uiState.selectedTab == TasksTab.ACTIVE) {
+                        item {
+                            SectionTitle("Текущие", visibleCurrentCount)
+                        }
 
-                    items(
-                        items = currentTasks,
-                        key = { it.id }
-                    ) { task ->
-                        AnimatedVisibility(
-                            visible = completingTaskId != task.id,
-                            enter = expandVertically(),
-                            exit = shrinkVertically(
-                                animationSpec = tween(
-                                    durationMillis = 260,
-                                    easing = FastOutSlowInEasing
+                        items(
+                            items = currentTasks,
+                            key = { "current_${it.id}" },
+                        ) { task ->
+                            AnimatedVisibility(
+                                visible = task.id !in transitioningTaskIds,
+                                enter = expandVertically(),
+                                exit = shrinkVertically(
+                                    animationSpec = tween(
+                                        durationMillis = 260,
+                                        easing = FastOutSlowInEasing,
+                                    )
+                                ) + fadeOut(
+                                    animationSpec = tween(durationMillis = 180)
+                                ) + slideOutVertically(
+                                    animationSpec = tween(
+                                        durationMillis = 260,
+                                        easing = FastOutSlowInEasing,
+                                    ),
+                                    targetOffsetY = { it / 2 }
                                 )
-                            ) + fadeOut(
-                                animationSpec = tween(durationMillis = 180)
-                            ) + slideOutVertically(
-                                animationSpec = tween(
-                                    durationMillis = 260,
-                                    easing = FastOutSlowInEasing
-                                ),
-                                targetOffsetY = { it / 2 }
-                            )
-                        ) {
-                            TaskRow(
+                            ) {
+                                TaskRow(
+                                    task = task,
+                                    muted = false,
+                                    rightText = null,
+                                    rightTextColor = Color.Transparent,
+                                    isSubmitting = task.id in transitioningTaskIds || uiState.isSubmittingTaskId == task.id,
+                                    onCheckedChange = {
+                                        if (task.backendStatus == "in_progress" && task.id !in transitioningTaskIds) {
+                                            transitioningTaskIds = transitioningTaskIds + task.id
+
+                                            scope.launch {
+                                                delay(220)
+                                                if (task.id in transitioningTaskIds) {
+                                                    optimisticReviewTasks = optimisticReviewTasks + (
+                                                            task.id to task.copy(
+                                                                bucket = TaskBucket.REVIEW,
+                                                                backendStatus = "in_review",
+                                                                checked = true,
+                                                            )
+                                                            )
+                                                }
+                                            }
+
+                                            onSubmitTask(task.projectId, task.id)
+                                        }
+                                    },
+                                    onClick = { onTaskClick(task.projectId, task.id) },
+                                )
+                            }
+                        }
+
+                        item {
+                            Spacer(modifier = Modifier.height(3.dp))
+                            SectionTitle("На проверке", displayedReviewTasks.size)
+                        }
+
+                        items(
+                            items = displayedReviewTasks,
+                            key = { "review_${it.id}" },
+                        ) { task ->
+                            ReviewAnimatedTaskRow(
                                 task = task,
-                                muted = false,
-                                rightText = null,
-                                rightTextColor = Color.Transparent,
-                                onCheckedChange = { moveTaskToReview(task.id) },
-                                onClick = { selectedTask = task }
+                                animateEnter = task.id in optimisticReviewTasks.keys || recentlyMovedTaskId == task.id,
+                                rightText = "В обработке",
+                                rightTextColor = Color(0xFFD6C100),
+                                onClick = { onTaskClick(task.projectId, task.id) },
                             )
                         }
-                    }
 
-                    item {
-                        Spacer(modifier = Modifier.height(3.dp))
-                        SectionTitle("На проверке", reviewTasks.size)
-                    }
+                        if (visibleCurrentCount == 0 && displayedReviewTasks.isEmpty()) {
+                            item {
+                                EmptyTasksPlaceholder(text = emptyStateMessage)
+                            }
+                        }
+                    } else {
+                        item {
+                            Spacer(modifier = Modifier.height(38.dp))
+                        }
 
-                    items(
-                        items = reviewTasks,
-                        key = { it.id }
-                    ) { task ->
-                        ReviewAnimatedTaskRow(
-                            task = task,
-                            animateEnter = recentlyMovedTaskId == task.id,
-                            rightText = "В обработке",
-                            rightTextColor = Color(0xFFD6C100)
-                        )
-                    }
-                } else {
-                    item {
-                        Spacer(modifier = Modifier.height(38.dp))
-                    }
+                        items(
+                            items = inactiveTasks,
+                            key = { "inactive_${it.id}" },
+                        ) { task ->
+                            TaskRow(
+                                task = task,
+                                muted = true,
+                                rightText = task.inactiveStatus?.title,
+                                rightTextColor = task.inactiveStatus?.color ?: Color.Transparent,
+                                isSubmitting = false,
+                                onCheckedChange = {},
+                                onClick = { onTaskClick(task.projectId, task.id) },
+                            )
+                        }
 
-                    items(
-                        items = inactiveTasks,
-                        key = { it.id }
-                    ) { task ->
-                        TaskRow(
-                            task = task,
-                            muted = true,
-                            rightText = task.inactiveStatus?.title,
-                            rightTextColor = task.inactiveStatus?.color ?: Color.Transparent,
-                            onCheckedChange = {},
-                            onClick = null
-                        )
+                        if (inactiveTasks.isEmpty()) {
+                            item {
+                                EmptyTasksPlaceholder(text = emptyStateMessage)
+                            }
+                        }
                     }
                 }
             }
@@ -427,7 +451,8 @@ private fun ReviewAnimatedTaskRow(
     task: TaskUi,
     animateEnter: Boolean,
     rightText: String,
-    rightTextColor: Color
+    rightTextColor: Color,
+    onClick: (() -> Unit)?,
 ) {
     var visible by remember(task.id, animateEnter) { mutableStateOf(!animateEnter) }
 
@@ -462,8 +487,9 @@ private fun ReviewAnimatedTaskRow(
             muted = true,
             rightText = rightText,
             rightTextColor = rightTextColor,
+            isSubmitting = false,
             onCheckedChange = {},
-            onClick = null
+            onClick = onClick,
         )
     }
 }
@@ -643,6 +669,7 @@ private fun TasksFilterDialog(
     availableProjects: List<String>,
     initialProject: String?,
     initialPriority: TaskPriority?,
+    allowProjectSelection: Boolean,
     onDismiss: () -> Unit,
     onApply: (String?, TaskPriority?) -> Unit,
     onReset: () -> Unit
@@ -652,7 +679,7 @@ private fun TasksFilterDialog(
     var projectExpanded by remember { mutableStateOf(false) }
 
     val dialogHeight by animateDpAsState(
-        targetValue = if (projectExpanded) 417.dp else 245.dp,
+        targetValue = if (allowProjectSelection && projectExpanded) 417.dp else if (allowProjectSelection) 245.dp else 174.dp,
         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
         label = "filter_dialog_height"
     )
@@ -676,27 +703,29 @@ private fun TasksFilterDialog(
                     .fillMaxSize()
                     .padding(top = 17.dp, start = 10.dp, end = 10.dp, bottom = 20.dp)
             ) {
-                Text(
-                    text = "Проект",
-                    fontSize = 14.sp,
-                    lineHeight = 18.sp,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = BluePrimary300,
-                    modifier = Modifier.padding(start = 11.dp)
-                )
+                if (allowProjectSelection) {
+                    Text(
+                        text = "Проект",
+                        fontSize = 14.sp,
+                        lineHeight = 18.sp,
+                        fontFamily = OnestFontFamily,
+                        fontWeight = FontWeight.Normal,
+                        color = BluePrimary300,
+                        modifier = Modifier.padding(start = 11.dp)
+                    )
 
-                Spacer(modifier = Modifier.height(6.dp))
+                    Spacer(modifier = Modifier.height(6.dp))
 
-                FilterProjectSelector(
-                    availableProjects = availableProjects,
-                    selectedProject = selectedProject,
-                    expanded = projectExpanded,
-                    onExpandedChange = { projectExpanded = it },
-                    onProjectSelected = { selectedProject = it }
-                )
+                    FilterProjectSelector(
+                        availableProjects = availableProjects,
+                        selectedProject = selectedProject,
+                        expanded = projectExpanded,
+                        onExpandedChange = { projectExpanded = it },
+                        onProjectSelected = { selectedProject = it }
+                    )
 
-                Spacer(modifier = Modifier.height(11.dp))
+                    Spacer(modifier = Modifier.height(11.dp))
+                }
 
                 Text(
                     text = "Приоритет",
@@ -1111,6 +1140,7 @@ private fun TaskRow(
     muted: Boolean,
     rightText: String?,
     rightTextColor: Color = Color(0xFFD6C100),
+    isSubmitting: Boolean,
     onCheckedChange: () -> Unit,
     onClick: (() -> Unit)? = null
 ) {
@@ -1252,7 +1282,8 @@ private fun TaskRow(
                     )
                 } else {
                     TaskCheckbox(
-                        checked = task.checked,
+                        checked = task.checked || isSubmitting,
+                        enabled = !isSubmitting && task.backendStatus == "in_progress",
                         onClick = onCheckedChange
                     )
                 }
@@ -1274,43 +1305,99 @@ private fun TaskRow(
 @Composable
 private fun TaskCheckbox(
     checked: Boolean,
+    enabled: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val checkboxFillColor = Color(0xFF4C88EA)
+    val borderColor by animateColorAsState(
+        targetValue = if (enabled || checked) Color.Black else Color(0xFFB0B3C7),
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "task_checkbox_border_color",
+    )
+    val fillColor by animateColorAsState(
+        targetValue = if (checked) checkboxFillColor else Color.Transparent,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "task_checkbox_fill_color",
+    )
+    val contentAlpha by animateFloatAsState(
+        targetValue = if (enabled || checked) 1f else 0.62f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "task_checkbox_alpha",
+    )
+    val checkmarkAlpha by animateFloatAsState(
+        targetValue = if (checked) 1f else 0f,
+        animationSpec = tween(durationMillis = 170, easing = FastOutSlowInEasing),
+        label = "task_checkbox_checkmark_alpha",
+    )
+    val checkmarkScale by animateFloatAsState(
+        targetValue = if (checked) 1f else 0.72f,
+        animationSpec = tween(durationMillis = 180, easing = FastOutSlowInEasing),
+        label = "task_checkbox_checkmark_scale",
+    )
 
     Box(
         modifier = modifier
             .size(TaskCheckboxSize)
+            .graphicsLayer { alpha = contentAlpha }
             .background(
-                color = if (checked) checkboxFillColor else Color.Transparent,
+                color = fillColor,
                 shape = RoundedCornerShape(2.dp)
             )
             .border(
                 width = 2.dp,
-                color = Color.Black,
+                color = borderColor,
                 shape = RoundedCornerShape(2.dp)
             )
-            .clickable { onClick() },
+            .clickable(enabled = enabled) { onClick() },
         contentAlignment = Alignment.Center
     ) {
-        if (checked) {
-            Canvas(modifier = Modifier.size(14.dp)) {
-                drawLine(
+        Canvas(
+            modifier = Modifier
+                .size(14.dp)
+                .graphicsLayer {
+                    alpha = checkmarkAlpha
+                    scaleX = checkmarkScale
+                    scaleY = checkmarkScale
+                }
+        ) {
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.15f, size.height * 0.55f),
+                end = Offset(size.width * 0.40f, size.height * 0.80f),
+                strokeWidth = 2.8f,
+                cap = StrokeCap.Round
+            )
+            drawLine(
+                color = Color.White,
+                start = Offset(size.width * 0.40f, size.height * 0.80f),
+                end = Offset(size.width * 0.88f, size.height * 0.22f),
+                strokeWidth = 2.8f,
+                cap = StrokeCap.Round
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskDetailsLoadingDialog(
+    onDismiss: () -> Unit,
+) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(
+            modifier = Modifier
+                .width(348.dp)
+                .height(616.dp)
+                .background(
                     color = Color.White,
-                    start = Offset(size.width * 0.15f, size.height * 0.55f),
-                    end = Offset(size.width * 0.40f, size.height * 0.80f),
-                    strokeWidth = 2.8f,
-                    cap = StrokeCap.Round
-                )
-                drawLine(
-                    color = Color.White,
-                    start = Offset(size.width * 0.40f, size.height * 0.80f),
-                    end = Offset(size.width * 0.88f, size.height * 0.22f),
-                    strokeWidth = 2.8f,
-                    cap = StrokeCap.Round
-                )
-            }
+                    shape = RoundedCornerShape(18.dp)
+                ),
+            contentAlignment = Alignment.Center,
+        ) {
+            CircularProgressIndicator(color = BluePrimary300)
         }
     }
 }
@@ -1816,9 +1903,139 @@ private fun ParticipantsSummaryText(
     }
 }
 
-private fun shortParticipantName(fullName: String): String {
-    val parts = fullName.trim().split(" ").filter { it.isNotBlank() }
-    if (parts.isEmpty()) return fullName
-    if (parts.size == 1) return parts.first()
-    return "${parts[0]} ${parts[1].first()}."
+@Composable
+private fun TasksListLoadingState() {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(color = BluePrimary300)
+    }
+}
+
+@Composable
+private fun EmptyTasksPlaceholder(
+    text: String = "Задачи не найдены",
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 18.dp, start = 24.dp, end = 24.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = text,
+            fontSize = 15.sp,
+            lineHeight = 20.sp,
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            color = Color(0xFF8C8C8C),
+            textAlign = TextAlign.Center,
+        )
+    }
+}
+
+private fun TaskPriorityFilter.toUiPriority(): TaskPriority {
+    return when (this) {
+        TaskPriorityFilter.HIGH -> TaskPriority.HIGH
+        TaskPriorityFilter.MEDIUM -> TaskPriority.MEDIUM
+        TaskPriorityFilter.LOW -> TaskPriority.LOW
+    }
+}
+
+private fun TaskPriority.toFilter(): TaskPriorityFilter {
+    return when (this) {
+        TaskPriority.HIGH -> TaskPriorityFilter.HIGH
+        TaskPriority.MEDIUM -> TaskPriorityFilter.MEDIUM
+        TaskPriority.LOW -> TaskPriorityFilter.LOW
+    }
+}
+
+private fun TaskDto.toTaskUi(
+    projectNames: Map<Long, String>,
+    bucket: TaskBucket = when (status) {
+        "in_review" -> TaskBucket.REVIEW
+        "done" -> TaskBucket.INACTIVE
+        else -> TaskBucket.CURRENT
+    },
+    inactiveStatus: InactiveStatus? = null,
+): TaskUi {
+    return TaskUi(
+        id = id,
+        projectId = projectId,
+        title = title,
+        project = projectNames[projectId] ?: "Проект #$projectId",
+        priority = priority.toUiPriority(),
+        deadline = dueAt.toShortUiDate(),
+        detailsDeadline = dueAt.toLongUiDate(),
+        description = description.orEmpty(),
+        bucket = bucket,
+        backendStatus = status,
+        checked = status == "in_review",
+        inactiveStatus = inactiveStatus,
+        participants = emptyList(),
+    )
+}
+
+private fun TaskDetailsUi.toTaskUi(): TaskUi {
+    return TaskUi(
+        id = task.id,
+        projectId = task.projectId,
+        title = task.title,
+        project = projectName,
+        priority = task.priority.toUiPriority(),
+        deadline = task.dueAt.toShortUiDate(),
+        detailsDeadline = task.dueAt.toLongUiDate(),
+        description = task.description.orEmpty(),
+        bucket = when (task.status) {
+            "in_review" -> TaskBucket.REVIEW
+            "done" -> TaskBucket.INACTIVE
+            else -> TaskBucket.CURRENT
+        },
+        backendStatus = task.status,
+        checked = task.status == "in_review",
+        inactiveStatus = when {
+            task.status == "done" -> InactiveStatus.DONE
+            task.isOverdue() -> InactiveStatus.OVERDUE
+            else -> null
+        },
+        participants = participants.map { TaskParticipantUi(it.name, it.role) },
+    )
+}
+
+private fun String.toUiPriority(): TaskPriority {
+    return when (lowercase()) {
+        "high" -> TaskPriority.HIGH
+        "low" -> TaskPriority.LOW
+        else -> TaskPriority.MEDIUM
+    }
+}
+
+private fun String?.toShortUiDate(): String {
+    val instant = parseApiInstant(this) ?: return "Без срока"
+    return instant
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("dd.MM.yy"))
+}
+
+private fun String?.toLongUiDate(): String {
+    val instant = parseApiInstant(this) ?: return "Без срока"
+    return instant
+        .atZone(ZoneId.systemDefault())
+        .format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+}
+
+private fun TaskDto.isOverdue(): Boolean {
+    if (status == "done") return false
+    val dueInstant = parseApiInstant(dueAt) ?: return false
+    return dueInstant.isBefore(Instant.now())
+}
+
+private fun parseApiInstant(value: String?): Instant? {
+    if (value.isNullOrBlank()) return null
+
+    return runCatching { Instant.parse(value) }
+        .getOrElse {
+            runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
+        }
 }

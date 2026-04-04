@@ -31,9 +31,7 @@ class AuthRepositoryImpl(
                 )
             )
 
-            sessionManager.saveToken(resp.token)
-            sessionManager.updateUser(resp.user)
-
+            sessionManager.updateUser(null)
             Result.success(resp)
         } catch (e: Throwable) {
             Result.failure(parseApiError(e))

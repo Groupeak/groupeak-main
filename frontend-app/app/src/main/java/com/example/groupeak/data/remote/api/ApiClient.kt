@@ -16,6 +16,12 @@ object ApiClient {
     lateinit var userApi: UserApi
         private set
 
+    lateinit var projectApi: ProjectApi
+        private set
+
+    lateinit var taskApi: TaskApi
+        private set
+
     fun init(sessionManager: SessionManager) {
         val okHttpClient: OkHttpClient = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(sessionManager))
@@ -29,6 +35,8 @@ object ApiClient {
 
         authApi = retrofit.create(AuthApi::class.java)
         userApi = retrofit.create(UserApi::class.java)
+        projectApi = retrofit.create(ProjectApi::class.java)
+        taskApi = retrofit.create(TaskApi::class.java)
 
         isInitialized = true
     }

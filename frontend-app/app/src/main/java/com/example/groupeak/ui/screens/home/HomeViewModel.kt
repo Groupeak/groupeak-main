@@ -6,37 +6,71 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.groupeak.data.local.SessionManager
+import com.example.groupeak.data.remote.dto.ProjectDto
+import com.example.groupeak.data.remote.dto.TaskDto
+import com.example.groupeak.domain.repository.ProjectRepository
+import com.example.groupeak.domain.repository.TaskRepository
 import com.example.groupeak.domain.repository.UserRepository
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 class HomeViewModel(
     private val userRepository: UserRepository,
+    private val projectRepository: ProjectRepository,
+    private val taskRepository: TaskRepository,
     private val sessionManager: SessionManager,
 ) : ViewModel() {
 
     var uiState by mutableStateOf(
         HomeUiState(
-            upcomingTasks = mockUpcomingTasks(),
-            projects = mockProjects(),
+            upcomingTasks = emptyList(),
+            projects = emptyList(),
         )
     )
         private set
 
+    private var currentUserId: Long? = null
+    private var lastObservedUserId: Long? = null
+
+    private var projectsCache: List<ProjectDto> = emptyList()
+    private var myTasksCache: List<TaskDto> = emptyList()
+    private var nearestTasksCache: List<TaskDto> = emptyList()
+
     init {
         viewModelScope.launch {
             sessionManager.user.collectLatest { user ->
-                if (user != null) {
-                    uiState = uiState.copy(
-                        userName = formatNameSurname(user.fullName),
-                        email = user.email,
-                        avatarUrl = user.avatarUrl,
-                    )
+                currentUserId = user?.id
+
+                if (user == null) {
+                    lastObservedUserId = null
+                    projectsCache = emptyList()
+                    myTasksCache = emptyList()
+                    nearestTasksCache = emptyList()
+
+                    uiState = HomeUiState()
+                    return@collectLatest
+                }
+
+                uiState = uiState.copy(
+                    userName = formatNameSurname(user.fullName),
+                    email = user.email,
+                    avatarUrl = user.avatarUrl,
+                )
+
+                if (user.id != lastObservedUserId) {
+                    lastObservedUserId = user.id
+                    refreshHomeContent()
                 }
             }
         }
 
-        refreshProfile()
+        if (sessionManager.user.value == null) {
+            refreshProfile()
+        }
     }
 
     fun refreshProfile() {
@@ -44,64 +78,111 @@ class HomeViewModel(
             userRepository.getProfile()
         }
     }
+
+    fun refreshHomeContent() {
+        refreshProjects()
+        refreshMyTasks()
+        refreshNearestTasks()
+    }
+
+    fun refreshProjects() {
+        viewModelScope.launch {
+            projectRepository.getProjects()
+                .onSuccess { projects ->
+                    projectsCache = projects
+                    rebuildHomeState()
+                }
+                .onFailure {
+                    projectsCache = emptyList()
+                    rebuildHomeState()
+                }
+        }
+    }
+
+    fun refreshMyTasks() {
+        viewModelScope.launch {
+            taskRepository.getMyTasks()
+                .onSuccess { tasks ->
+                    myTasksCache = tasks
+                    rebuildHomeState()
+                }
+                .onFailure {
+                    myTasksCache = emptyList()
+                    rebuildHomeState()
+                }
+        }
+    }
+
+    fun refreshNearestTasks() {
+        viewModelScope.launch {
+            taskRepository.getNearestTasks()
+                .onSuccess { tasks ->
+                    nearestTasksCache = tasks
+                    rebuildHomeState()
+                }
+                .onFailure {
+                    nearestTasksCache = emptyList()
+                    rebuildHomeState()
+                }
+        }
+    }
+
+    private fun rebuildHomeState() {
+        val ownerId = currentUserId ?: sessionManager.user.value?.id
+        val projectNameById = projectsCache.associate { it.id to it.projectName }
+
+        uiState = uiState.copy(
+            upcomingTasks = nearestTasksCache.map { it.toHomeTaskUi(projectNameById) },
+            projects = projectsCache.map { it.toHomeProjectUi(ownerId, myTasksCache) },
+        )
+    }
 }
 
-private fun mockUpcomingTasks(): List<HomeTaskUi> = listOf(
-    HomeTaskUi(
-        title = "Дебаг кода",
-        projectName = "SmartHome",
-        deadline = "08.03.26",
-    ),
-    HomeTaskUi(
-        title = "Проанализировать аудиторию",
-        projectName = "BBwatch",
-        deadline = "09.03.26",
-    ),
-    HomeTaskUi(
-        title = "Подготовить отчет по проекту",
-        projectName = "Fortnuts",
-        deadline = "10.03.26",
-    ),
-)
+private fun TaskDto.toHomeTaskUi(projectNameById: Map<Long, String>): HomeTaskUi {
+    return HomeTaskUi(
+        title = title,
+        projectName = projectNameById[projectId] ?: "Проект #$projectId",
+        deadline = formatApiDateShort(dueAt),
+    )
+}
 
-private fun mockProjects(): List<HomeProjectUi> = listOf(
-    HomeProjectUi(
-        title = "SmartHome",
-        completedCount = 13,
-        overdueCount = 2,
-        isOwner = true,
-    ),
-    HomeProjectUi(
-        title = "Программа для Tahoe",
-        completedCount = 5,
-        overdueCount = 0,
-    ),
-    HomeProjectUi(
-        title = "ManageGroup",
-        completedCount = 0,
-        overdueCount = 5,
-    ),
-    HomeProjectUi(
-        title = "BBwatch",
-        completedCount = 8,
-        overdueCount = 1,
-    ),
-    HomeProjectUi(
-        title = "Fortnuts",
-        completedCount = 3,
-        overdueCount = 4,
-    ),
-    HomeProjectUi(
-        title = "Travel AI",
-        completedCount = 11,
-        overdueCount = 0,
-    ),
-    HomeProjectUi(
-        title = "TaskFlow",
-        completedCount = 2,
-        overdueCount = 7,
-    ),
-)
+private fun ProjectDto.toHomeProjectUi(
+    currentUserId: Long?,
+    myTasks: List<TaskDto>,
+): HomeProjectUi {
+    val projectTasks = myTasks.filter { it.projectId == id }
+
+    return HomeProjectUi(
+        title = projectName,
+        completedCount = projectTasks.count { it.status == "done" },
+        overdueCount = projectTasks.count { it.isOverdue() },
+        isOwner = ownerId == currentUserId,
+    )
+}
+
+private fun TaskDto.isOverdue(): Boolean {
+    if (status == "done") return false
+    val dueInstant = parseApiInstant(dueAt) ?: return false
+    return dueInstant.isBefore(Instant.now())
+}
+
+private val homeDateFormatter: DateTimeFormatter = DateTimeFormatter.ofPattern("dd.MM.yy")
+
+private fun formatApiDateShort(value: String?): String {
+    val instant = parseApiInstant(value) ?: return "Без дедлайна"
+    return instant
+        .atZone(ZoneId.systemDefault())
+        .format(homeDateFormatter)
+}
+
+private fun parseApiInstant(value: String?): Instant? {
+    if (value.isNullOrBlank()) return null
+
+    return runCatching { Instant.parse(value) }
+        .getOrElse {
+            runCatching { OffsetDateTime.parse(value).toInstant() }.getOrNull()
+        }
+}
 
 private fun formatNameSurname(fullName: String): String {
     val parts = fullName.trim()

@@ -1,4 +1,4 @@
-package com.example.groupeak.ui.screens.createproject
+package com.example.groupeak.ui.screens.create_project
 
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
@@ -7,26 +7,51 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.requiredHeight
+import androidx.compose.foundation.layout.requiredWidth
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -35,13 +60,43 @@ import androidx.compose.ui.unit.sp
 import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.theme.BluePrimary300
+import com.example.groupeak.ui.theme.Gray650
 import com.example.groupeak.ui.theme.GroupeakDarkBlue
 import com.example.groupeak.ui.theme.GroupeakLightGray
-import com.example.groupeak.ui.theme.Gray650
 import com.example.groupeak.ui.theme.OnestFontFamily
 import kotlinx.coroutines.delay
 
-// ================= РАЗМЕРЫ =================
+private object DateVisualTransformation : VisualTransformation {
+    override fun filter(text: AnnotatedString): TransformedText {
+        val raw = text.text.filter { it.isDigit() }.take(8)
+        val out = buildString {
+            for (i in raw.indices) {
+                append(raw[i])
+                if (i == 1 || i == 3) append('.')
+            }
+        }
+
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int {
+                val original = offset.coerceIn(0, raw.length)
+                var transformed = original
+                if (raw.length > 2 && original > 2) transformed += 1
+                if (raw.length > 4 && original > 4) transformed += 1
+                return transformed.coerceIn(0, out.length)
+            }
+
+            override fun transformedToOriginal(offset: Int): Int {
+                val transformed = offset.coerceIn(0, out.length)
+                var original = transformed
+                if (raw.length > 2 && transformed > 2) original -= 1
+                if (raw.length > 4 && transformed > 5) original -= 1
+                return original.coerceIn(0, raw.length)
+            }
+        }
+
+        return TransformedText(AnnotatedString(out), offsetMapping)
+    }
+}
 
 private val NotifHitBoxSize = 28.dp
 private val NotifIconSize = 22.dp
@@ -73,130 +128,127 @@ private val GapFromSentTextToCardBottom = 17.dp
 private val SentTextHeight: Dp =
     GapFromButtonToCardBottom + SentExtraHeight - GapFromButtonToSentText - GapFromSentTextToCardBottom
 
-private val BaseReserveBottomForButtonArea: Dp =
-    GapFromBigFieldToButton + ButtonHeight + GapFromButtonToCardBottom
-
 private val CardVerticalOffset = 90.dp
 
 private val FieldTextStyle = TextStyle(
     fontSize = 14.sp,
     fontFamily = OnestFontFamily,
     fontWeight = FontWeight.Normal,
-    color = GroupeakDarkBlue
+    color = GroupeakDarkBlue,
 )
 
-private val SentMessageTextStyle = TextStyle(
+private val StatusMessageTextStyle = TextStyle(
     fontSize = 14.sp,
-    lineHeight = 14.sp,
+    lineHeight = 16.sp,
     fontFamily = OnestFontFamily,
     fontWeight = FontWeight.Normal,
-    color = Color(0xFF26BC30)
 )
 
-// ================= ОСНОВНОЙ ЭКРАН =================
+private val ErrorTextStyle = TextStyle(
+    fontSize = 12.sp,
+    fontFamily = OnestFontFamily,
+    fontWeight = FontWeight.Normal,
+    color = Color(0xFFD32F2F),
+)
 
 @Composable
 fun CreateProjectScreen(
+    uiState: CreateProjectUiState,
     onBack: () -> Unit,
+    onProjectNameChange: (String) -> Unit,
+    onDeadlineChange: (String) -> Unit,
+    onDescriptionChange: (String) -> Unit,
+    onCreateClick: () -> Unit,
     hasNotifications: Boolean = true,
-    onNotificationsClick: () -> Unit = {}
+    onNotificationsClick: () -> Unit = {},
 ) {
-    var projectName by rememberSaveable { mutableStateOf("") }
-    var deadline by rememberSaveable { mutableStateOf("") }
-    var description by rememberSaveable { mutableStateOf("") }
-
     var isExpanded by rememberSaveable { mutableStateOf(false) }
-    var showCreatedText by rememberSaveable { mutableStateOf(false) }
-    var createdPulse by rememberSaveable { mutableStateOf(0) }
+    var showStatusText by rememberSaveable { mutableStateOf(false) }
 
     val animatedCardHeight by animateDpAsState(
         targetValue = if (isExpanded) WhiteCardHeight + SentExtraHeight else WhiteCardHeight,
         animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
-        label = "cardHeight"
+        label = "cardHeight",
     )
 
-    val createdAlpha by animateFloatAsState(
-        targetValue = if (showCreatedText) 1f else 0f,
+    val statusAlpha by animateFloatAsState(
+        targetValue = if (showStatusText) 1f else 0f,
         animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
-        label = "createdAlpha"
+        label = "statusAlpha",
     )
 
-    val createdSlide by animateDpAsState(
-        targetValue = if (showCreatedText) 0.dp else 10.dp,
+    val statusSlide by animateDpAsState(
+        targetValue = if (showStatusText) 0.dp else 10.dp,
         animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
-        label = "createdSlide"
+        label = "statusSlide",
     )
 
-    LaunchedEffect(createdPulse) {
-        if (createdPulse == 0) return@LaunchedEffect
+    LaunchedEffect(uiState.statusMessagePulse) {
+        if (uiState.statusMessagePulse == 0 || uiState.statusMessage.isNullOrBlank()) return@LaunchedEffect
 
         isExpanded = true
         delay(140)
-        showCreatedText = true
+        showStatusText = true
 
-        delay(2100)
-
-        showCreatedText = false
-        isExpanded = false
+        if (!uiState.statusMessageIsError) {
+            delay(2100)
+            showStatusText = false
+            isExpanded = false
+        }
     }
 
     GroupeakBackground {
         Box(modifier = Modifier.fillMaxSize()) {
-
             Column(
                 modifier = Modifier.fillMaxSize(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-
-                // Шапка
                 FeedbackHeader(
                     title = "Создание проекта",
                     hasNotifications = hasNotifications,
                     onBackClick = onBack,
-                    onNotificationsClick = onNotificationsClick
+                    onNotificationsClick = onNotificationsClick,
                 )
 
                 Spacer(Modifier.height(GapHeaderToCard))
 
-                // 🔷 ОБЛАСТЬ ЦЕНТРИРОВАНИЯ КАРТОЧКИ
                 Box(
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxWidth(),
-                    contentAlignment = Alignment.TopCenter  // ← Фиксируем верх
+                    contentAlignment = Alignment.TopCenter,
                 ) {
-                    // Белая карточка
                     Box(
                         modifier = Modifier
-                            .padding(top = CardVerticalOffset)  // ← Визуальное центрирование
+                            .padding(top = CardVerticalOffset)
                             .requiredWidth(WhiteCardWidth)
-                            .requiredHeight(animatedCardHeight)  // ← Анимация только высоты
+                            .requiredHeight(animatedCardHeight)
                             .clip(RoundedCornerShape(24.dp))
-                            .background(Color.White)
+                            .background(Color.White),
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxSize()
-                                .padding(horizontal = 10.dp)
+                                .padding(horizontal = 10.dp),
                         ) {
-
                             Spacer(Modifier.height(TopPaddingToFirstLabel))
 
                             LabeledInputField(
                                 label = "Название",
                                 labelStartPadding = LabelStartPaddingFromCard,
                                 iconRes = R.drawable.ic_folder,
-                                value = projectName,
+                                value = uiState.projectName,
                                 onValueChange = {
-                                    projectName = it
-                                    if (showCreatedText || isExpanded) {
-                                        showCreatedText = false
+                                    onProjectNameChange(it)
+                                    if (showStatusText || isExpanded) {
+                                        showStatusText = false
                                         isExpanded = false
                                     }
                                 },
                                 placeholder = "Название проекта",
                                 readOnly = false,
-                                fieldModifier = Modifier.requiredWidth(FieldWidth)
+                                error = uiState.projectNameError,
+                                fieldModifier = Modifier.requiredWidth(FieldWidth),
                             )
 
                             Spacer(Modifier.height(GapBetweenInputBlocks))
@@ -205,17 +257,20 @@ fun CreateProjectScreen(
                                 label = "Дедлайн",
                                 labelStartPadding = LabelStartPaddingFromCard,
                                 iconRes = R.drawable.ic_calendar,
-                                value = deadline,
+                                value = uiState.deadline,
                                 onValueChange = {
-                                    deadline = it
-                                    if (showCreatedText || isExpanded) {
-                                        showCreatedText = false
+                                    onDeadlineChange(it)
+                                    if (showStatusText || isExpanded) {
+                                        showStatusText = false
                                         isExpanded = false
                                     }
                                 },
                                 placeholder = "ДД.ММ.ГГГГ",
                                 readOnly = false,
-                                fieldModifier = Modifier.requiredWidth(FieldWidth)
+                                error = uiState.deadlineError,
+                                keyboardType = KeyboardType.Number,
+                                visualTransformation = DateVisualTransformation,
+                                fieldModifier = Modifier.requiredWidth(FieldWidth),
                             )
 
                             Spacer(Modifier.height(GapBetweenInputBlocks))
@@ -228,33 +283,34 @@ fun CreateProjectScreen(
                                 color = BluePrimary300,
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(start = LabelStartPaddingFromCard)
+                                    .padding(start = LabelStartPaddingFromCard),
                             )
 
                             Spacer(modifier = Modifier.height(GapLabelToField))
 
                             MultilineFieldScrollable(
                                 placeholder = "Описание проекта",
-                                value = description,
+                                value = uiState.description,
                                 onValueChange = {
-                                    description = it
-                                    if (showCreatedText || isExpanded) {
-                                        showCreatedText = false
+                                    onDescriptionChange(it)
+                                    if (showStatusText || isExpanded) {
+                                        showStatusText = false
                                         isExpanded = false
                                     }
                                 },
-                                fieldModifier = Modifier.requiredWidth(FieldWidth)
+                                fieldModifier = Modifier.requiredWidth(FieldWidth),
                             )
 
                             Spacer(modifier = Modifier.height(GapFromBigFieldToButton))
 
                             Box(
                                 modifier = Modifier.fillMaxWidth(),
-                                contentAlignment = Alignment.Center
+                                contentAlignment = Alignment.Center,
                             ) {
                                 SendButton154x32(
-                                    text = "Создать",
-                                    onClick = { createdPulse += 1 }
+                                    text = if (uiState.isLoading) "Создание..." else "Создать",
+                                    enabled = !uiState.isLoading,
+                                    onClick = onCreateClick,
                                 )
                             }
 
@@ -264,14 +320,24 @@ fun CreateProjectScreen(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(SentTextHeight)
-                                    .graphicsLayer { alpha = createdAlpha },
-                                contentAlignment = Alignment.Center
+                                    .graphicsLayer { alpha = statusAlpha }
+                                    .offset(y = statusSlide),
+                                contentAlignment = Alignment.Center,
                             ) {
-                                Text(
-                                    text = "Проект создан",
-                                    style = SentMessageTextStyle,
-                                    textAlign = TextAlign.Center
-                                )
+                                val statusMessage = uiState.statusMessage.orEmpty()
+                                if (statusMessage.isNotBlank()) {
+                                    Text(
+                                        text = statusMessage,
+                                        style = StatusMessageTextStyle.copy(
+                                            color = if (uiState.statusMessageIsError) {
+                                                Color(0xFFD32F2F)
+                                            } else {
+                                                Color(0xFF26BC30)
+                                            }
+                                        ),
+                                        textAlign = TextAlign.Center,
+                                    )
+                                }
                             }
 
                             Spacer(modifier = Modifier.height(GapFromButtonToCardBottom))
@@ -285,19 +351,17 @@ fun CreateProjectScreen(
     }
 }
 
-// ================= ВСПОМОГАТЕЛЬНЫЕ КОМПОНЕНТЫ =================
-
 @Composable
 private fun FeedbackHeader(
     title: String,
     hasNotifications: Boolean,
     onBackClick: () -> Unit,
-    onNotificationsClick: () -> Unit
+    onNotificationsClick: () -> Unit,
 ) {
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(top = 55.dp)
+            .padding(top = 55.dp),
     ) {
         Icon(
             painter = painterResource(id = R.drawable.ic_back_arrow),
@@ -307,7 +371,7 @@ private fun FeedbackHeader(
                 .align(Alignment.CenterStart)
                 .padding(start = 8.dp)
                 .size(28.dp)
-                .clickable { onBackClick() }
+                .clickable { onBackClick() },
         )
 
         Text(
@@ -319,7 +383,7 @@ private fun FeedbackHeader(
             textAlign = TextAlign.Center,
             modifier = Modifier
                 .align(Alignment.Center)
-                .fillMaxWidth()
+                .fillMaxWidth(),
         )
 
         Box(
@@ -328,13 +392,13 @@ private fun FeedbackHeader(
                 .padding(end = 19.dp)
                 .size(NotifHitBoxSize)
                 .clickable { onNotificationsClick() },
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_notif),
                 contentDescription = "Уведомления",
                 tint = BluePrimary300,
-                modifier = Modifier.size(NotifIconSize)
+                modifier = Modifier.size(NotifIconSize),
             )
 
             if (hasNotifications) {
@@ -343,7 +407,7 @@ private fun FeedbackHeader(
                         .size(8.dp)
                         .align(Alignment.TopEnd)
                         .offset(x = (-3).dp, y = 2.dp)
-                        .background(Color.Red, CircleShape)
+                        .background(Color.Red, CircleShape),
                 )
             }
         }
@@ -360,9 +424,12 @@ private fun LabeledInputField(
     onValueChange: (String) -> Unit,
     placeholder: String,
     readOnly: Boolean,
+    error: String? = null,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    visualTransformation: VisualTransformation = VisualTransformation.None,
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
-    fieldHeight: Dp = FieldHeight
+    fieldHeight: Dp = FieldHeight,
 ) {
     Column(modifier = modifier) {
         Text(
@@ -371,7 +438,7 @@ private fun LabeledInputField(
             fontFamily = OnestFontFamily,
             fontWeight = FontWeight.Normal,
             color = BluePrimary300,
-            modifier = Modifier.padding(start = labelStartPadding)
+            modifier = Modifier.padding(start = labelStartPadding),
         )
 
         Spacer(Modifier.height(GapLabelToField))
@@ -381,13 +448,13 @@ private fun LabeledInputField(
                 .requiredHeight(fieldHeight)
                 .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(start = 11.dp, end = 14.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Icon(
                 painter = painterResource(id = iconRes),
                 contentDescription = null,
                 tint = BluePrimary300,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(22.dp),
             )
 
             Spacer(Modifier.width(12.dp))
@@ -396,7 +463,7 @@ private fun LabeledInputField(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight(),
-                contentAlignment = Alignment.CenterStart
+                contentAlignment = Alignment.CenterStart,
             ) {
                 BasicTextField(
                     value = value,
@@ -405,6 +472,8 @@ private fun LabeledInputField(
                     singleLine = true,
                     readOnly = readOnly,
                     textStyle = FieldTextStyle.copy(color = valueColor),
+                    keyboardOptions = KeyboardOptions(keyboardType = keyboardType),
+                    visualTransformation = visualTransformation,
                     decorationBox = { inner ->
                         if (value.isBlank()) {
                             Text(
@@ -412,13 +481,22 @@ private fun LabeledInputField(
                                 style = FieldTextStyle,
                                 color = Gray650,
                                 maxLines = 1,
-                                overflow = TextOverflow.Clip
+                                overflow = TextOverflow.Clip,
                             )
                         }
                         inner()
-                    }
+                    },
                 )
             }
+        }
+
+        if (!error.isNullOrBlank()) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = error,
+                style = ErrorTextStyle,
+                modifier = Modifier.padding(start = labelStartPadding),
+            )
         }
     }
 }
@@ -430,7 +508,7 @@ private fun MultilineFieldScrollable(
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
-    fieldHeight: Dp = BigFieldHeight
+    fieldHeight: Dp = BigFieldHeight,
 ) {
     val scrollState = rememberScrollState()
 
@@ -441,9 +519,9 @@ private fun MultilineFieldScrollable(
                 .border(
                     1.dp,
                     GroupeakLightGray,
-                    RoundedCornerShape(18.dp)
+                    RoundedCornerShape(18.dp),
                 )
-                .padding(horizontal = 14.dp, vertical = 12.dp)
+                .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             BasicTextField(
                 value = value,
@@ -458,11 +536,11 @@ private fun MultilineFieldScrollable(
                         Text(
                             text = placeholder,
                             style = FieldTextStyle,
-                            color = Gray650
+                            color = Gray650,
                         )
                     }
                     inner()
-                }
+                },
             )
         }
     }
@@ -471,25 +549,29 @@ private fun MultilineFieldScrollable(
 @Composable
 private fun SendButton154x32(
     text: String,
-    onClick: () -> Unit
+    enabled: Boolean,
+    onClick: () -> Unit,
 ) {
     Button(
         onClick = onClick,
+        enabled = enabled,
         modifier = Modifier
             .requiredWidth(ButtonWidth)
             .requiredHeight(ButtonHeight),
         shape = RoundedCornerShape(18.dp),
         colors = ButtonDefaults.buttonColors(
             containerColor = BluePrimary300,
-            contentColor = Color.White
+            contentColor = Color.White,
+            disabledContainerColor = BluePrimary300.copy(alpha = 0.55f),
+            disabledContentColor = Color.White.copy(alpha = 0.9f),
         ),
-        contentPadding = PaddingValues(0.dp)
+        contentPadding = PaddingValues(0.dp),
     ) {
         Text(
             text = text,
             fontSize = 14.sp,
             fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.SemiBold
+            fontWeight = FontWeight.SemiBold,
         )
     }
 }
