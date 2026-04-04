@@ -73,8 +73,12 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Post("/change-email", authHandler.ChangeEmail)       // POST /api/v1/user/change-email
 				r.Get("/profile", authHandler.GetProfile)              // GET /api/v1/user/get-profile
 				r.Put("/profile", authHandler.UpdateProfile)           // PUT /api/v1/user/profile
-			})
 
+				r.Route("/avatar", func(r chi.Router) {
+					r.Post("/", authHandler.UploadAvatar)   // POST /api/v1/user/avatar
+					r.Delete("/", authHandler.DeleteAvatar) // DELETE /api/v1/user/avatar
+				})
+			})
 		})
 	})
 
