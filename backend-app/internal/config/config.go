@@ -6,10 +6,14 @@ import (
 )
 
 type Config struct {
-	DBDsn     string
-	JWTToken  string
-	HTTPPort  string
-	AppDomain string
+	DBDsn       string
+	JWTToken    string
+	HTTPPort    string
+	AppDomain   string
+	S3Endpoint  string
+	S3AccessKey string
+	S3SecretKey string
+	S3Bucket    string
 }
 
 func Load() Config {
@@ -35,10 +39,23 @@ func Load() Config {
 
 	appDomain := os.Getenv("APP_DOMAIN")
 
+	s3Endpoint := os.Getenv("S3_ENDPOINT")
+	s3Access := os.Getenv("S3_ACCESS_KEY")
+	s3Secret := os.Getenv("S3_SECRET_KEY")
+	s3Bucket := os.Getenv("S3_BUCKET_NAME")
+
+	if s3Endpoint == "" || s3Access == "" || s3Secret == "" || s3Bucket == "" {
+		log.Fatal("S3 environment variables must be set")
+	}
+
 	return Config{
-		HTTPPort:  httpPort,
-		DBDsn:     dsn,
-		JWTToken:  jwtToken,
-		AppDomain: appDomain,
+		HTTPPort:    httpPort,
+		DBDsn:       dsn,
+		JWTToken:    jwtToken,
+		AppDomain:   appDomain,
+		S3Endpoint:  s3Endpoint,
+		S3AccessKey: s3Access,
+		S3SecretKey: s3Secret,
+		S3Bucket:    s3Bucket,
 	}
 }
