@@ -6,15 +6,23 @@ import (
 
 	"groupeak/internal/models"
 	"groupeak/internal/services"
+
+	"github.com/minio/minio-go/v7"
 )
 
 type AuthHandler struct {
 	authService *services.AuthService
+	minioClient *minio.Client
+	bucketName  string
+	endpoint    string
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
+func NewAuthHandler(authService *services.AuthService, minioClient *minio.Client, bucketName string, endpoint string) *AuthHandler {
 	return &AuthHandler{
 		authService: authService,
+		minioClient: minioClient,
+		bucketName:  bucketName,
+		endpoint:    endpoint,
 	}
 }
 
