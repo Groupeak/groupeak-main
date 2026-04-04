@@ -12,9 +12,14 @@ sealed class Screen(val route: String) {
     object ChangePassword : Screen("change_password")
     object Notifications : Screen("notifications")
     object Tasks : Screen("tasks")
-    object ProjectTasks : Screen("project_tasks/{projectId}") {
-        fun createRoute(projectId: Long): String = "project_tasks/$projectId"
+
+    object ProjectTasks : Screen("project_tasks/{projectId}?isOwner={isOwner}") {
+        fun createRoute(
+            projectId: Long,
+            isOwner: Boolean = false,
+        ): String = "project_tasks/$projectId?isOwner=$isOwner"
     }
+
     object CreateProject : Screen("create_project")
     object CreateTask : Screen("create_task")
     object CreateEvent : Screen("create_event")

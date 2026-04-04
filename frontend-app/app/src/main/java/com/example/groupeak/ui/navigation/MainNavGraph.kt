@@ -1,14 +1,14 @@
 package com.example.groupeak.ui.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalLifecycleOwner
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -32,10 +32,13 @@ import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
 import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.home.HomeScreen
-import com.example.groupeak.ui.screens.home.HomeViewModel
+import com.example.groupeak.ui.screens.home.mockHomeUiState
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
+import com.example.groupeak.ui.screens.project.ProjectScreen
+import com.example.groupeak.ui.screens.project.ProjectTab
+import com.example.groupeak.ui.screens.project.mockProjectUiState
 import com.example.groupeak.ui.screens.tasks.TasksScreen
 import com.example.groupeak.ui.screens.tasks.TasksViewModel
 import com.example.groupeak.ui.screens.tasks.TasksViewModelFactory
@@ -85,45 +88,16 @@ fun MainNavGraph(
         }
 
         composable(Screen.Home.route) {
-            val vm: HomeViewModel = viewModel(
-                factory = object : ViewModelProvider.Factory {
-                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
-                        if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
-                            @Suppress("UNCHECKED_CAST")
-                            return HomeViewModel(
-                                ServiceLocator.userRepository,
-                                ServiceLocator.projectRepository,
-                                ServiceLocator.taskRepository,
-                                ServiceLocator.sessionManager,
-                            ) as T
-                        }
-                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
-                    }
-                }
-            )
-
-            val state = vm.uiState
-            val lifecycleOwner = LocalLifecycleOwner.current
-
-            DisposableEffect(lifecycleOwner) {
-                val observer = LifecycleEventObserver { _, event ->
-                    if (event == Lifecycle.Event.ON_RESUME) {
-                        vm.refreshHomeContent()
-                    }
-                }
-
-                lifecycleOwner.lifecycle.addObserver(observer)
-
-                onDispose {
-                    lifecycleOwner.lifecycle.removeObserver(observer)
-                }
-            }
+            val state = remember { mockHomeUiState() }
 
             HomeScreen(
                 uiState = state,
                 onProfileClick = { navController.navigate(Screen.Profile.route) },
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
                 onAllTasksClick = { navController.navigate(Screen.Tasks.route) },
+                onProjectClick = { projectId, isOwner ->
+                    navController.navigate(Screen.ProjectTasks.createRoute(projectId, isOwner))
+                },
             )
         }
 
@@ -296,43 +270,41 @@ fun MainNavGraph(
         composable(
             route = Screen.ProjectTasks.route,
             arguments = listOf(
-                navArgument("projectId") { type = NavType.LongType }
+                navArgument("projectId") { type = NavType.LongType },
+                navArgument("isOwner") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
             ),
         ) { backStackEntry ->
             val projectId = backStackEntry.arguments?.getLong("projectId")
                 ?: return@composable
 
-            val vm: TasksViewModel = viewModel(
-                factory = TasksViewModelFactory(
-                    taskRepository = ServiceLocator.taskRepository,
-                    projectRepository = ServiceLocator.projectRepository,
-                    initialProjectId = projectId,
+            val isOwner = backStackEntry.arguments?.getBoolean("isOwner") ?: false
+
+            val baseState = remember(projectId, isOwner) {
+                mockProjectUiState(
+                    projectId = projectId,
+                    isOwner = isOwner,
                 )
-            )
-
-            val uiState = vm.uiState
-            val taskCreated by backStackEntry
-                .savedStateHandle
-                .getStateFlow("task_created", false)
-                .collectAsState()
-
-            LaunchedEffect(taskCreated) {
-                if (taskCreated) {
-                    vm.refreshTasks(clearStatus = true)
-                    backStackEntry.savedStateHandle["task_created"] = false
-                }
             }
 
-            TasksScreen(
+            var selectedTab by rememberSaveable(projectId, isOwner) {
+                mutableStateOf(ProjectTab.TASKS)
+            }
+
+            val uiState = baseState.copy(selectedTab = selectedTab)
+
+            ProjectScreen(
                 uiState = uiState,
                 onBack = { navController.popBackStack() },
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onTabSelected = vm::onTabSelected,
-                onApplyFilters = vm::applyFilters,
-                onResetFilters = vm::resetFilters,
-                onTaskClick = vm::openTask,
-                onDismissTaskDetails = vm::closeTaskDetails,
-                onSubmitTask = vm::submitTaskForReview,
+                onTabSelected = { selectedTab = it },
+                onInfoClick = { },
+                onFilterClick = { },
+                onTaskClick = { },
+                onMemberClick = { },
+                onInviteMemberClick = { },
             )
         }
 

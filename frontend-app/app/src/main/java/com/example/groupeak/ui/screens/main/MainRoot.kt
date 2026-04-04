@@ -36,9 +36,13 @@ fun MainRoot(
     val backStackEntry by mainNavController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
-    val selectedRoute = when (currentRoute) {
-        Screen.ChangeEmail.route,
-        Screen.ChangePassword.route -> Screen.Home.route
+    val selectedRoute = when {
+        currentRoute == Screen.ChangeEmail.route ||
+                currentRoute == Screen.ChangePassword.route -> Screen.Home.route
+
+        currentRoute == Screen.ProjectTasks.route ||
+                currentRoute?.startsWith("project_tasks/") == true -> Screen.Tasks.route
+
         else -> currentRoute
     }
 

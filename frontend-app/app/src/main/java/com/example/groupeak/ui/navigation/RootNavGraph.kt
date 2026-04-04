@@ -13,6 +13,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.navigation
+import com.example.groupeak.BuildConfig
 import com.example.groupeak.service_locator.ServiceLocator
 import com.example.groupeak.ui.screens.login.LoginScreen
 import com.example.groupeak.ui.screens.login.LoginViewModel
@@ -51,7 +52,7 @@ fun RootNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
 
     LaunchedEffect(token, currentRoute) {
-        if (token.isNullOrBlank() && currentRoute == Graph.MAIN) {
+        if (!BuildConfig.DEV_BYPASS_AUTH && token.isNullOrBlank() && currentRoute == Graph.MAIN) {
             rootNavController.navigate(Graph.AUTH) {
                 popUpTo(rootNavController.graph.id) { inclusive = true }
                 launchSingleTop = true

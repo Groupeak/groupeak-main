@@ -153,6 +153,7 @@ private fun ProjectDto.toHomeProjectUi(
     val projectTasks = myTasks.filter { it.projectId == id }
 
     return HomeProjectUi(
+        id = id,
         title = projectName,
         completedCount = projectTasks.count { it.status == "done" },
         overdueCount = projectTasks.count { it.isOverdue() },

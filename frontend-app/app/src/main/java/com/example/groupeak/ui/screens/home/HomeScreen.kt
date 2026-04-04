@@ -54,6 +54,7 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onAllTasksClick: () -> Unit,
+    onProjectClick: (Long, Boolean) -> Unit,
 ) {
     GroupeakBackground {
         Box(
@@ -83,6 +84,7 @@ fun HomeScreen(
                 upcomingTasks = uiState.upcomingTasks,
                 projects = uiState.projects,
                 onAllTasksClick = onAllTasksClick,
+                onProjectClick = onProjectClick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .offset(y = 197.dp)
@@ -194,6 +196,7 @@ private fun HomeCard(
     upcomingTasks: List<HomeTaskUi>,
     projects: List<HomeProjectUi>,
     onAllTasksClick: () -> Unit,
+    onProjectClick: (Long, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     Column(
@@ -248,8 +251,6 @@ private fun HomeCard(
             }
         }
 
-        //Spacer(modifier = Modifier.height(3.dp))
-
         upcomingTasks.take(3).forEach { task ->
             HomeTaskRow(task = task)
             SectionDivider()
@@ -267,13 +268,14 @@ private fun HomeCard(
             modifier = Modifier.padding(start = 12.dp)
         )
 
-        //Spacer(modifier = Modifier.height(3.dp))
-
         LazyColumn(
             modifier = Modifier.fillMaxSize()
         ) {
             itemsIndexed(projects) { index, project ->
-                ProjectRow(project = project)
+                ProjectRow(
+                    project = project,
+                    onClick = { onProjectClick(project.id, project.isOwner) }
+                )
 
                 if (index != projects.lastIndex) {
                     SectionDivider()
@@ -334,10 +336,12 @@ private fun HomeTaskRow(
 @Composable
 private fun ProjectRow(
     project: HomeProjectUi,
+    onClick: () -> Unit,
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(start = 41.dp, end = 41.dp, top = 17.dp, bottom = 17.dp)
     ) {
         Row(

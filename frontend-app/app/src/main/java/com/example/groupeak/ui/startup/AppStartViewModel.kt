@@ -6,6 +6,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.example.groupeak.BuildConfig
 import com.example.groupeak.data.local.SessionManager
 import com.example.groupeak.domain.repository.UserRepository
 import kotlinx.coroutines.flow.filter
@@ -39,7 +40,11 @@ class AppStartViewModel(
             val token = sessionManager.token.value
 
             if (token.isNullOrBlank()) {
-                state = AppStartState.Auth
+                state = if (BuildConfig.DEV_BYPASS_AUTH) {
+                    AppStartState.Main
+                } else {
+                    AppStartState.Auth
+                }
                 return@launch
             }
 
