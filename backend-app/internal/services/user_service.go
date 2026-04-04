@@ -228,3 +228,44 @@ func (s *AuthService) GetTaskStats(ctx context.Context, userID int64) (models.Ta
 	}
 	return st, nil
 }
+
+func (s *AuthService) UpdateAvatarURL(ctx context.Context, userID int64, avatarURL string) error {
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE users
+		SET avatar_url = $1, updated_at = NOW()
+		WHERE id = $2
+	`, avatarURL, userID)
+	if err != nil {
+		return fmt.Errorf("update avatar url: %w", err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+
+	return nil
+}
+
+func (s *AuthService) DeleteAvatarURL(ctx context.Context, userID int64) error {
+	res, err := s.db.ExecContext(ctx, `
+			UPDATE users
+			SET avatar_url = NULL, updated_at = NOW()
+			WHERE id = $1
+	`, userID)
+	if err != nil {
+		return fmt.Errorf("delete avater url: %w", err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rowsAffected == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
