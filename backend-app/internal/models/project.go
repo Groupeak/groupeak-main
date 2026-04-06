@@ -12,27 +12,12 @@ type Project struct {
 	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
-type CreateProjectRequest struct {
-	Name        string     `json:"name"`
-	Description *string    `json:"description"`
-	DeadlineAt  *time.Time `json:"deadline_at"`
-}
-
 type ProjectRole string
 
 const (
 	ProjectRoleOwner  ProjectRole = "owner"
 	ProjectRoleMember ProjectRole = "member"
 )
-
-type ProjectListItem struct {
-	Project
-	Role ProjectRole `json:"role"`
-}
-
-type InviteMemberRequest struct {
-	Email string `json:"email"`
-}
 
 type ProjectMember struct {
 	ID        int64       `json:"id"`
@@ -62,14 +47,6 @@ type ProjectInvite struct {
 	Status    string    `json:"status"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type PatchProjectRequest struct {
-	Name            *string    `json:"name,omitempty"`
-	ProjectName     *string    `json:"project_name,omitempty"`
-	Description     *string    `json:"description,omitempty"`
-	DeadlineAt      *time.Time `json:"deadline_at,omitempty"`
-	ClearDeadlineAt bool       `json:"clear_deadline_at,omitempty"`
 }
 
 type ProjectWithStats struct {
