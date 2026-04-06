@@ -2,11 +2,14 @@ package main
 
 import (
 	"log"
+	"log/slog"
 	"net/http"
+	"os"
 
 	"groupeak/internal/config"
 	"groupeak/internal/db"
 	"groupeak/internal/handlers"
+	"groupeak/internal/repository"
 	"groupeak/internal/router"
 	"groupeak/internal/services"
 
@@ -21,7 +24,7 @@ func main() {
 		log.Println("no .env file found, using OS env only")
 	}
 
-	// 1. Загружаем конфигурацию приложения (убедись, что добавил S3 поля в config.go)
+	// 1. Загружаем конфигурацию приложения
 	cfg := config.Load()
 
 	// 2. Подключаемся к PostgreSQL и накатываем миграции
@@ -32,7 +35,6 @@ func main() {
 	defer sqlDB.Close()
 
 	// 3. Инициализируем S3 клиент (MinIO)
-	// Secure: false используется для локальной разработки без SSL (http://localhost:9000)
 	minioClient, err := minio.New(cfg.S3Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 		Secure: false,
@@ -41,20 +43,28 @@ func main() {
 		log.Fatalf("failed to init minio client: %v", err)
 	}
 
-	// 4. Создаём сервисы (бизнес-логика)
-	authService := services.NewAuthService(sqlDB, cfg.JWTToken)
-	projectService := services.NewProjectService(sqlDB)
-	taskService := services.NewTaskService(sqlDB)
-	eventService := services.NewEventService(sqlDB)
+	// Инициализируем логгер
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	// 5. Создаём HTTP-хендлеры
-	// Передаем клиент MinIO и имя бакета в AuthHandler
+	// 4. Создаём ВСЕ репозитории первыми
+	taskRepo := repository.NewTaskRepository()
+	projectRepo := repository.NewProjectRepository()
+	userRepo := repository.NewUserRepository()
+	eventRepo := repository.NewEventRepository()
+
+	// 5. Создаём ВСЕ сервисы
+	authService := services.NewAuthService(sqlDB, userRepo, cfg.JWTToken, logger)
+	taskService := services.NewTaskService(sqlDB, taskRepo, logger)
+	projectService := services.NewProjectService(sqlDB, projectRepo, logger)
+	eventService := services.NewEventService(sqlDB, eventRepo, logger)
+
+	// 6. Создаём HTTP-хендлеры
 	authHandler := handlers.NewAuthHandler(authService, minioClient, cfg.S3Bucket, cfg.S3Endpoint)
 	projectHandler := handlers.NewProjectHandler(projectService)
 	taskHandler := handlers.NewTaskHandler(taskService)
 	eventHandler := handlers.NewEventHandler(eventService)
 
-	// 6. Собираем роутер
+	// 7. Собираем роутер
 	r := router.NewRouter(
 		authHandler,
 		projectHandler,
@@ -63,7 +73,7 @@ func main() {
 		[]byte(cfg.JWTToken),
 	)
 
-	// 7. Запускаем HTTP-сервер
+	// 8. Запускаем HTTP-сервер
 	addr := ":" + cfg.HTTPPort
 	log.Printf("starting HTTP server on %s\n", addr)
 
