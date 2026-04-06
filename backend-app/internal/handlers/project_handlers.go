@@ -1,11 +1,10 @@
 package handlers
 
 import (
-	"errors"
 	"net/http"
 	"strconv"
 
-	"groupeak/internal/models"
+	"groupeak/internal/dto"
 	"groupeak/internal/services"
 
 	"github.com/go-chi/chi/v5"
@@ -38,7 +37,7 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.CreateProjectRequest
+	var req dto.CreateProjectRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -46,16 +45,11 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projectService.CreateProject(r.Context(), userID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNameIsRequired):
-			WriteError(w, http.StatusBadRequest, err.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, "internal server error")
-		}
+		HandleError(w, err)
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, map[string]interface{}{"project": project})
+	_ = WriteJSON(w, http.StatusCreated, map[string]interface{}{"project": project})
 }
 
 // GET /api/v1/projects
@@ -68,11 +62,11 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 
 	projects, err := h.projectService.ListUserProjects(r.Context(), userID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, "internal server error")
+		HandleError(w, err)
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]interface{}{"projects": projects})
+	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"projects": projects})
 }
 
 // PATCH /api/v1/projects/{projectID}
@@ -89,7 +83,7 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req models.PatchProjectRequest
+	var req dto.PatchProjectRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
 		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
@@ -97,21 +91,11 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projectService.UpdateProject(r.Context(), userID, projectID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNotFound):
-			WriteError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrNotProjectOwner):
-			WriteError(w, http.StatusForbidden, err.Error())
-		case errors.Is(err, services.ErrProjectNameIsRequired),
-			errors.Is(err, services.ErrNoFieldsToUpdate):
-			WriteError(w, http.StatusBadRequest, err.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, "internal server error")
-		}
+		HandleError(w, err)
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
 }
 
 // DELETE /api/v1/projects/{projectID}
@@ -130,14 +114,7 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 
 	err := h.projectService.DeleteProject(r.Context(), userID, projectID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNotFound):
-			WriteError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrNotProjectOwner):
-			WriteError(w, http.StatusForbidden, err.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, "internal server error")
-		}
+		HandleError(w, err)
 		return
 	}
 
@@ -160,16 +137,9 @@ func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 
 	project, err := h.projectService.GetProjectDetails(r.Context(), userID, projectID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrProjectNotFound):
-			WriteError(w, http.StatusNotFound, err.Error())
-		case errors.Is(err, services.ErrNotProjectMember):
-			WriteError(w, http.StatusForbidden, err.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, "internal server error")
-		}
+		HandleError(w, err)
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
+	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
 }
