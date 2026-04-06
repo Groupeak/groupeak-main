@@ -4,268 +4,126 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"groupeak/internal/models"
+	"net/http"
 	"strings"
 	"time"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/dto"
+	"groupeak/internal/models"
 )
 
 func (s *AuthService) GetProfile(ctx context.Context, userID int64) (*models.User, error) {
-	var (
-		user           models.User
-		avatarField    sql.NullString
-		birthDateField sql.NullTime
-		aboutField     sql.NullString
-	)
-
-	err := s.db.QueryRowContext(
-		ctx,
-		`SELECT id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at
-		 FROM users
-		 WHERE id = $1`,
-		userID,
-	).Scan(
-		&user.ID,
-		&user.FullName,
-		&avatarField,
-		&user.Email,
-		&user.Position,
-		&birthDateField,
-		&aboutField,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
-
+	user, _, err := s.repo.GetUserByID(ctx, s.db, userID)
 	if err == sql.ErrNoRows {
 		return nil, ErrUserNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("get profile: %w", err)
+		return nil, apperror.New(http.StatusInternalServerError, fmt.Sprintf("get profile: %v", err))
 	}
-
-	if avatarField.Valid {
-		user.AvatarURL = &avatarField.String
-	}
-	if birthDateField.Valid {
-		bd := birthDateField.Time.Format("02.01.2006")
-		user.BirthDate = &bd
-	}
-	if aboutField.Valid {
-		about := aboutField.String
-		user.About = &about
-	}
-
-	return &user, nil
+	return user, nil
 }
 
-func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req models.UpdateProfileRequest) (*models.UpdateProfileResponse, error) {
-	_, _, err := s.getUserByIDWithPassword(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user by ID: %w", err)
-	}
-
-	var (
-		setClauses []string
-		args       []interface{}
-		argIndex   = 1
-	)
+func (s *AuthService) UpdateProfile(ctx context.Context, userID int64, req dto.UpdateProfileRequest) (*dto.UpdateProfileResponse, error) {
+	setParts := make([]string, 0, 5)
+	args := make([]interface{}, 0, 5)
+	idx := 1
+	changed := false
+	tokenNeedsRefresh := false
+	var newPosition *string
 
 	if req.FullName != nil {
-		fullName := strings.TrimSpace(*req.FullName)
-		if fullName == "" {
-			return nil, ErrMissingFields
+		fn := strings.TrimSpace(*req.FullName)
+		if fn == "" {
+			return nil, apperror.New(http.StatusBadRequest, "full name cannot be empty")
 		}
-		setClauses = append(setClauses, fmt.Sprintf("full_name = $%d", argIndex))
-		args = append(args, fullName)
-		argIndex++
+		setParts = append(setParts, fmt.Sprintf("full_name = $%d", idx))
+		args = append(args, fn)
+		idx++
+		changed = true
 	}
 
 	if req.Position != nil {
-		p := strings.TrimSpace(*req.Position)
-
-		setClauses = append(setClauses, fmt.Sprintf("position = $%d", argIndex))
-		if p == "" {
-			args = append(args, nil)
-		} else {
-			if !ValidatePosition(&p) {
-				return nil, ErrInvalidPosition
-			}
-			args = append(args, p)
+		if !ValidatePosition(req.Position) {
+			return nil, ErrInvalidPosition
 		}
-		argIndex++
-	}
-
-	if req.AvatarURL != nil {
-		setClauses = append(setClauses, fmt.Sprintf("avatar_url = $%d", argIndex))
-		if *req.AvatarURL == "" {
-			args = append(args, nil)
-		} else {
-			args = append(args, *req.AvatarURL)
-		}
-		argIndex++
+		setParts = append(setParts, fmt.Sprintf("position = $%d", idx))
+		args = append(args, *req.Position)
+		idx++
+		changed = true
+		tokenNeedsRefresh = true
+		newPosition = req.Position
 	}
 
 	if req.BirthDate != nil {
 		bdStr := strings.TrimSpace(*req.BirthDate)
-
 		if bdStr == "" {
-			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
-			args = append(args, nil)
-			argIndex++
+			setParts = append(setParts, "birth_date = NULL")
+			changed = true
 		} else {
-			parsed, err := time.Parse("02.01.2006", bdStr)
+			bd, err := time.Parse("02.01.2006", bdStr)
 			if err != nil {
 				return nil, ErrInvalidBirthDate
 			}
-			if err := ValidateBirthDateAge(parsed); err != nil {
+			if err := ValidateBirthDateAge(bd); err != nil {
 				return nil, err
 			}
-
-			setClauses = append(setClauses, fmt.Sprintf("birth_date = $%d", argIndex))
-			args = append(args, parsed)
-			argIndex++
+			setParts = append(setParts, fmt.Sprintf("birth_date = $%d", idx))
+			args = append(args, bd.Format("2006-01-02"))
+			idx++
+			changed = true
 		}
 	}
 
 	if req.About != nil {
-		setClauses = append(setClauses, fmt.Sprintf("about = $%d", argIndex))
-		if *req.About == "" {
-			args = append(args, nil)
+		abt := strings.TrimSpace(*req.About)
+		if abt == "" {
+			setParts = append(setParts, "about = NULL")
 		} else {
-			about := strings.TrimSpace(*req.About)
-			args = append(args, about)
+			setParts = append(setParts, fmt.Sprintf("about = $%d", idx))
+			args = append(args, abt)
+			idx++
 		}
-		argIndex++
+		changed = true
 	}
 
-	if len(setClauses) == 0 {
+	if !changed {
 		return nil, ErrNothingToUpdate
 	}
 
-	setClauses = append(setClauses, fmt.Sprintf("updated_at = $%d", argIndex))
-	args = append(args, time.Now())
-	argIndex++
-
-	args = append(args, userID)
-
-	query := fmt.Sprintf(
-		"UPDATE users SET %s WHERE id = $%d RETURNING id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at",
-		strings.Join(setClauses, ", "),
-		argIndex,
-	)
-
-	var (
-		updatedUser    models.User
-		avatarField    sql.NullString
-		positionField  sql.NullString
-		birthDateField sql.NullTime
-		aboutField     sql.NullString
-	)
-
-	err = s.db.QueryRowContext(ctx, query, args...).Scan(
-		&updatedUser.ID,
-		&updatedUser.FullName,
-		&avatarField,
-		&updatedUser.Email,
-		&positionField,
-		&birthDateField,
-		&aboutField,
-		&updatedUser.CreatedAt,
-		&updatedUser.UpdatedAt,
-	)
+	user, err := s.repo.UpdateProfileDynamic(ctx, s.db, userID, setParts, args)
 	if err != nil {
-		return nil, fmt.Errorf("update user: %w", err)
+		return nil, apperror.New(http.StatusInternalServerError, fmt.Sprintf("update profile: %v", err))
 	}
 
-	if avatarField.Valid {
-		updatedUser.AvatarURL = &avatarField.String
+	resp := &dto.UpdateProfileResponse{User: *user}
+
+	if tokenNeedsRefresh {
+		token, err := s.generateToken(userID, newPosition)
+		if err == nil {
+			resp.Token = token
+		}
 	}
 
-	if positionField.Valid {
-		p := positionField.String
-		updatedUser.Position = &p
-	} else {
-		updatedUser.Position = nil
-	}
-
-	if birthDateField.Valid {
-		bd := birthDateField.Time.Format("02.01.2006")
-		updatedUser.BirthDate = &bd
-	}
-
-	if aboutField.Valid {
-		about := aboutField.String
-		updatedUser.About = &about
-	}
-
-	newToken, err := s.generateToken(updatedUser)
-	if err != nil {
-		return nil, fmt.Errorf("generate token: %w", err)
-	}
-
-	return &models.UpdateProfileResponse{
-		User:  updatedUser,
-		Token: newToken,
-	}, nil
+	return resp, nil
 }
 
 func (s *AuthService) GetTaskStats(ctx context.Context, userID int64) (models.TaskStats, error) {
-	const q = `
-        SELECT
-            COUNT(*) FILTER (WHERE t.status = 'done') AS done,
-            COUNT(*) FILTER (
-                WHERE t.status <> 'done'
-                  AND t.due_at IS NOT NULL
-                  AND t.due_at < NOW()
-            ) AS overdue
-        FROM tasks t
-        JOIN task_assignees ta ON ta.task_id = t.id
-        WHERE ta.user_id = $1
-    `
-	var st models.TaskStats
-	err := s.db.QueryRowContext(ctx, q, userID).Scan(&st.Done, &st.Overdue)
-	if err != nil {
-		return models.TaskStats{}, err
-	}
-	return st, nil
+	return s.repo.GetTaskStats(ctx, s.db, userID)
 }
 
 func (s *AuthService) UpdateAvatarURL(ctx context.Context, userID int64, avatarURL string) error {
-	res, err := s.db.ExecContext(ctx, `
-		UPDATE users
-		SET avatar_url = $1, updated_at = NOW()
-		WHERE id = $2
-	`, avatarURL, userID)
-	if err != nil {
-		return fmt.Errorf("update avatar url: %w", err)
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
+	err := s.repo.UpdateAvatarURL(ctx, s.db, userID, &avatarURL)
+	if err == sql.ErrNoRows {
 		return ErrUserNotFound
 	}
-
-	return nil
+	return err
 }
 
 func (s *AuthService) DeleteAvatarURL(ctx context.Context, userID int64) error {
-	res, err := s.db.ExecContext(ctx, `
-			UPDATE users
-			SET avatar_url = NULL, updated_at = NOW()
-			WHERE id = $1
-	`, userID)
-	if err != nil {
-		return fmt.Errorf("delete avater url: %w", err)
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return err
-	}
-	if rowsAffected == 0 {
+	err := s.repo.UpdateAvatarURL(ctx, s.db, userID, nil)
+	if err == sql.ErrNoRows {
 		return ErrUserNotFound
 	}
-	return nil
+	return err
 }
