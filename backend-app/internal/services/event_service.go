@@ -3,40 +3,68 @@ package services
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/dto"
 	"groupeak/internal/models"
-	"log"
+	"groupeak/internal/repository"
 )
 
 var (
-	ErrBeginTx           = errors.New("failed to begin transaction")
-	ErrInsertEvent       = errors.New("failed to insert event")
-	ErrPrepareStmt       = errors.New("failed to prepare participant statement")
-	ErrInsertParticipant = errors.New("failed to insert participant")
-	ErrCommitTx          = errors.New("failed to commit transaction")
-	ErrUpdateEvent       = errors.New("failed to update event fields")
-	ErrClearParticipants = errors.New("failed to clear old participants")
-	ErrEventNotFound     = errors.New("event not found")
-	ErrDeleteEvent       = errors.New("failed to delete event")
-	ErrGetEvents         = errors.New("failed to get events")
-	ErrNotEventCreator   = errors.New("user is not event creator or project owner")
+	ErrEventNotFound         = apperror.New(http.StatusNotFound, "event not found")
+	ErrNotEventCreator       = apperror.New(http.StatusForbidden, "user is not event creator or project owner")
+	ErrEventTitleRequired    = apperror.New(http.StatusBadRequest, "event title is required")
+	ErrEventStartAtRequired  = apperror.New(http.StatusBadRequest, "event start_at is required")
+	ErrEventEndBeforeStart   = apperror.New(http.StatusBadRequest, "end_at cannot be before start_at")
+	ErrEventNoFields         = apperror.New(http.StatusBadRequest, "no fields to update")
+	ErrInvalidParticipantIDs = apperror.New(http.StatusBadRequest, "one or more participant IDs are invalid")
 )
 
 type EventService struct {
-	db *sql.DB
+	db     *sql.DB
+	repo   repository.EventRepository
+	logger *slog.Logger
 }
 
-func NewEventService(db *sql.DB) *EventService {
-	return &EventService{db: db}
+func NewEventService(db *sql.DB, repo repository.EventRepository, logger *slog.Logger) *EventService {
+	return &EventService{db: db, repo: repo, logger: logger}
 }
 
-func (s *EventService) CreateEvent(ctx context.Context, projectID int, req models.CreateEventRequest) (*models.Event, error) {
+// RunInTx оборачивает операции в транзакцию
+func (s *EventService) RunInTx(ctx context.Context, fn func(tx repository.DBTX) error) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrBeginTx, err)
+		s.logger.Error("failed to begin tx", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit tx", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+	return nil
+}
+
+func (s *EventService) CreateEvent(ctx context.Context, userID, projectID int, req dto.CreateEventRequest) (*dto.EventWithParticipants, error) {
+	req.Title = strings.TrimSpace(req.Title)
+	if req.Title == "" {
+		return nil, ErrEventTitleRequired
+	}
+	if req.StartAt.IsZero() {
+		return nil, ErrEventStartAtRequired
+	}
+	if req.EndAt != nil && req.EndAt.Before(req.StartAt) {
+		return nil, ErrEventEndBeforeStart
+	}
 
 	event := &models.Event{
 		ProjectID:   projectID,
@@ -47,242 +75,187 @@ func (s *EventService) CreateEvent(ctx context.Context, projectID int, req model
 		EndAt:       req.EndAt,
 	}
 
-	queryEvent := `
-        INSERT INTO project_events 
-            (project_id, title, meeting_url, description, start_at, end_at, created_at, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-        RETURNING id, created_at, updated_at`
+	err := s.RunInTx(ctx, func(tx repository.DBTX) error {
+		if errTx := s.repo.CreateEvent(ctx, tx, event); errTx != nil {
+			return errTx
+		}
 
-	err = tx.QueryRowContext(ctx, queryEvent,
-		event.ProjectID,
-		event.Title,
-		event.MeetingURL,
-		event.Description,
-		event.StartAt,
-		event.EndAt,
-	).Scan(&event.ID, &event.CreatedAt, &event.UpdatedAt)
+		participants := req.ParticipantIDs
+		found := false
+		for _, id := range participants {
+			if id == userID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			participants = append(participants, userID)
+		}
+
+		if len(participants) > 0 {
+			exists, errTx := s.repo.CheckUsersExist(ctx, tx, participants)
+			if errTx != nil {
+				return errTx
+			}
+			if !exists {
+				return ErrInvalidParticipantIDs
+			}
+
+			if errTx := s.repo.AddParticipants(ctx, tx, event.ID, participants); errTx != nil {
+				return errTx
+			}
+		}
+
+		event.ParticipantIDs = participants
+		return nil
+	})
 
 	if err != nil {
-		log.Printf("[ERROR] CreateEvent INSERT failed: %+v", err) // ← добавь это
-		return nil, fmt.Errorf("%w: %v", ErrInsertEvent, err)
+		s.logger.Error("failed to create event", slog.String("error", err.Error()))
+		return nil, err
 	}
 
-	// ←←← остальной код (участники) без изменений ↓
-	if len(req.ParticipantIDs) > 0 {
-		queryParticipant := `INSERT INTO event_participants (event_id, user_id) VALUES ($1, $2)`
-		stmt, err := tx.PrepareContext(ctx, queryParticipant)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrPrepareStmt, err)
-		}
-		defer stmt.Close()
-
-		for _, userID := range req.ParticipantIDs {
-			if _, err := stmt.ExecContext(ctx, event.ID, userID); err != nil {
-				return nil, fmt.Errorf("%w (user_id: %d): %v", ErrInsertParticipant, userID, err)
-			}
-			event.ParticipantIDs = append(event.ParticipantIDs, userID)
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCommitTx, err)
-	}
-
-	return event, nil
+	return &dto.EventWithParticipants{
+		Event:        *event,
+		Participants: event.ParticipantIDs,
+	}, nil
 }
 
-func (s *EventService) UpdateEvent(ctx context.Context, projectID, eventID int, req models.UpdateEventRequest) (*models.Event, error) {
-	tx, err := s.db.BeginTx(ctx, nil)
+func (s *EventService) UpdateEvent(ctx context.Context, userID, projectID, eventID int, req dto.UpdateEventRequest) error {
+	authorized, err := s.repo.IsEventAuthorized(ctx, s.db, userID, projectID, eventID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrBeginTx, err)
+		s.logger.Error("failed to check event auth", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-	defer tx.Rollback()
-
-	queryUpdate := `
-        UPDATE project_events 
-        SET 
-            title = COALESCE($1, title),
-            meeting_url = CASE WHEN $2::boolean THEN $3 ELSE meeting_url END,
-            description = CASE WHEN $4::boolean THEN $5 ELSE description END,
-            start_at = COALESCE($6, start_at),
-            end_at = CASE WHEN $7::boolean THEN $8 ELSE end_at END,
-            updated_at = NOW()
-        WHERE id = $9 AND project_id = $10`
-
-	_, err = tx.ExecContext(ctx, queryUpdate,
-		req.Title,
-		req.MeetingURL != nil, req.MeetingURL,
-		req.Description != nil, req.Description,
-		req.StartAt,
-		req.EndAt != nil, req.EndAt,
-		eventID, projectID)
-
-	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrUpdateEvent, err)
-	}
-
-	if req.ParticipantIDs != nil {
-		_, err = tx.ExecContext(ctx, `DELETE FROM event_participants WHERE event_id = $1`, eventID)
-		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrClearParticipants, err)
-		}
-
-		if len(req.ParticipantIDs) > 0 {
-			queryParticipant := `INSERT INTO event_participants (event_id, user_id) VALUES ($1, $2)`
-			stmt, err := tx.PrepareContext(ctx, queryParticipant)
-			if err != nil {
-				return nil, fmt.Errorf("%w: %v", ErrPrepareStmt, err)
-			}
-			defer stmt.Close()
-
-			for _, userID := range req.ParticipantIDs {
-				if _, err := stmt.ExecContext(ctx, eventID, userID); err != nil {
-					return nil, fmt.Errorf("%w (user_id: %d): %v", ErrInsertParticipant, userID, err)
-				}
-			}
-		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCommitTx, err)
-	}
-
-	return nil, nil
-}
-
-func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, eventID int) error {
-	isAuthorized, err := s.isEventAuthorized(ctx, userID, projectID, eventID)
-	if err != nil {
-		return err
-	}
-	if !isAuthorized {
+	if !authorized {
 		return ErrNotEventCreator
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
+	setParts := make([]string, 0)
+	args := make([]interface{}, 0)
+	idx := 1
+
+	if req.Title != nil {
+		val := strings.TrimSpace(*req.Title)
+		if val == "" {
+			return ErrEventTitleRequired
+		}
+		setParts = append(setParts, fmt.Sprintf("title = $%d", idx))
+		args = append(args, val)
+		idx++
+	}
+
+	if req.MeetingURL != nil {
+		setParts = append(setParts, fmt.Sprintf("meeting_url = $%d", idx))
+		args = append(args, *req.MeetingURL)
+		idx++
+	}
+
+	if req.Description != nil {
+		setParts = append(setParts, fmt.Sprintf("description = $%d", idx))
+		args = append(args, *req.Description)
+		idx++
+	}
+
+	if req.StartAt != nil {
+		setParts = append(setParts, fmt.Sprintf("start_at = $%d", idx))
+		args = append(args, *req.StartAt)
+		idx++
+	}
+
+	if req.EndAt != nil {
+		setParts = append(setParts, fmt.Sprintf("end_at = $%d", idx))
+		args = append(args, *req.EndAt)
+		idx++
+	}
+
+	if len(setParts) == 0 && req.ParticipantIDs == nil {
+		return ErrEventNoFields
+	}
+
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		if len(setParts) > 0 {
+			if errTx := s.repo.UpdateEventDynamic(ctx, tx, eventID, setParts, args); errTx != nil {
+				return errTx
+			}
+		}
+
+		if req.ParticipantIDs != nil {
+			if errTx := s.repo.ClearParticipants(ctx, tx, eventID); errTx != nil {
+				return errTx
+			}
+			if len(req.ParticipantIDs) > 0 {
+				exists, errTx := s.repo.CheckUsersExist(ctx, tx, req.ParticipantIDs)
+				if errTx != nil {
+					return errTx
+				}
+				if !exists {
+					return ErrInvalidParticipantIDs
+				}
+
+				if errTx := s.repo.AddParticipants(ctx, tx, eventID, req.ParticipantIDs); errTx != nil {
+					return errTx
+				}
+			}
+		}
+		return nil
+	})
+
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrBeginTx, err)
+		s.logger.Error("failed to update event", slog.String("error", err.Error()))
+		return err
 	}
-	defer tx.Rollback()
 
-	_, err = tx.ExecContext(ctx, `DELETE FROM event_participants WHERE event_id = $1`, eventID)
+	s.logger.Info("event updated", slog.Int("event_id", eventID))
+	return nil
+}
+
+func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, eventID int) error {
+	authorized, err := s.repo.IsEventAuthorized(ctx, s.db, userID, projectID, eventID)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrClearParticipants, err)
+		s.logger.Error("failed to check event auth", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+	if !authorized {
+		return ErrNotEventCreator
 	}
 
-	_, err = tx.ExecContext(ctx, `DELETE FROM project_events WHERE id = $1 AND project_id = $2`, eventID, projectID)
-	if err != nil {
-		return fmt.Errorf("%w: %v", ErrDeleteEvent, err)
+	err = s.repo.DeleteEvent(ctx, s.db, eventID)
+	if err == sql.ErrNoRows {
+		return ErrEventNotFound
+	} else if err != nil {
+		s.logger.Error("failed to delete event", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("%w: %v", ErrCommitTx, err)
-	}
-
+	s.logger.Info("event deleted", slog.Int("event_id", eventID))
 	return nil
 }
 
 func (s *EventService) GetUserEvents(ctx context.Context, userID int) ([]models.Event, error) {
-	query := `
-		SELECT 
-			pe.id, pe.project_id, pe.title, pe.meeting_url, pe.description,
-			pe.start_at, pe.end_at, pe.created_at, pe.updated_at
-		FROM project_events pe
-		INNER JOIN event_participants ep ON ep.event_id = pe.id
-		WHERE ep.user_id = $1
-		ORDER BY pe.start_at ASC
-	`
-
-	rows, err := s.db.QueryContext(ctx, query, userID)
+	events, eventIDs, err := s.repo.GetUserEvents(ctx, s.db, userID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGetEvents, err)
-	}
-	defer rows.Close()
-
-	events := make([]models.Event, 0)
-
-	for rows.Next() {
-		var event models.Event
-		var meetingURL, description sql.NullString
-		var endAt sql.NullTime
-
-		err := rows.Scan(
-			&event.ID,
-			&event.ProjectID,
-			&event.Title,
-			&meetingURL,
-			&description,
-			&event.StartAt,
-			&endAt,
-			&event.CreatedAt,
-			&event.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan event: %v", err)
-		}
-
-		if meetingURL.Valid {
-			event.MeetingURL = &meetingURL.String
-		}
-		if description.Valid {
-			event.Description = &description.String
-		}
-		if endAt.Valid {
-			event.EndAt = &endAt.Time
-		}
-
-		participantIDs, err := s.getEventParticipants(ctx, event.ID)
-		if err != nil {
-			return nil, err
-		}
-		event.ParticipantIDs = participantIDs
-
-		events = append(events, event)
+		s.logger.Error("failed to get user events", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrGetEvents, err)
+	if len(events) == 0 {
+		return events, nil
+	}
+
+	partsMap, err := s.repo.GetParticipantsForEvents(ctx, s.db, eventIDs)
+	if err != nil {
+		s.logger.Error("failed to get participants", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	for i := range events {
+		if pIDs := partsMap[events[i].ID]; pIDs != nil {
+			events[i].ParticipantIDs = pIDs
+		} else {
+			events[i].ParticipantIDs = []int{}
+		}
 	}
 
 	return events, nil
-}
-
-func (s *EventService) isEventAuthorized(ctx context.Context, userID, projectID, eventID int) (bool, error) {
-	query := `
-		SELECT EXISTS(
-			SELECT 1 FROM event_participants ep
-			WHERE ep.event_id = $1 AND ep.user_id = $2
-		) OR (
-			SELECT owner_id FROM projects WHERE id = $3
-		) = $2
-	`
-
-	var authorized bool
-	err := s.db.QueryRowContext(ctx, query, eventID, userID, projectID).Scan(&authorized)
-	if err != nil {
-		return false, fmt.Errorf("failed to check event authorization: %v", err)
-	}
-
-	return authorized, nil
-}
-
-func (s *EventService) getEventParticipants(ctx context.Context, eventID int) ([]int, error) {
-	query := `SELECT user_id FROM event_participants WHERE event_id = $1 ORDER BY user_id`
-
-	rows, err := s.db.QueryContext(ctx, query, eventID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get participants: %v", err)
-	}
-	defer rows.Close()
-
-	participants := make([]int, 0)
-	for rows.Next() {
-		var userID int
-		if err := rows.Scan(&userID); err != nil {
-			return nil, fmt.Errorf("failed to scan participant: %v", err)
-		}
-		participants = append(participants, userID)
-	}
-
-	return participants, nil
 }
