@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"groupeak/internal/middleware"
 	"io"
 	"net/http"
 	"strconv"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/middleware"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -22,7 +24,19 @@ func WriteError(w http.ResponseWriter, status int, msg string) {
 	_ = WriteJSON(w, status, map[string]string{"error": msg})
 }
 
+// HandleError централизованно обрабатывает ошибки от сервисов
+func HandleError(w http.ResponseWriter, err error) {
+	var appErr *apperror.AppError
+	if errors.As(err, &appErr) {
+		WriteError(w, appErr.Code, appErr.Message)
+		return
+	}
+
+	WriteError(w, http.StatusInternalServerError, "internal server error")
+}
+
 func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
+	maxJSONBody := int64(1 << 20) // 1 Mb
 	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBody)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
@@ -32,7 +46,7 @@ func DecodeJSON(w http.ResponseWriter, r *http.Request, dst interface{}) error {
 	}
 
 	if err := dec.Decode(&struct{}{}); err != io.EOF {
-		return errors.New("request body must constain only one JSON object")
+		return errors.New("request body must contain only one JSON object")
 	}
 
 	return nil
