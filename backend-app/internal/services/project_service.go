@@ -3,166 +3,126 @@ package services
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"groupeak/internal/models"
+	"log/slog"
+	"net/http"
 	"strings"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/dto"
+	"groupeak/internal/models"
+	"groupeak/internal/repository"
 )
 
 var (
-	ErrProjectNotFound       = errors.New("project not found")
-	ErrNotProjectOwner       = errors.New("user is not project owner")
-	ErrNotProjectMember      = errors.New("user is not a member of this project")
-	ErrAlreadyProjectMember  = errors.New("user is already project member")
-	ErrInviteNotFound        = errors.New("invite not found")
-	ErrInviteAlreadyUsed     = errors.New("invite is already used or revoked")
-	ErrInviteAlreadyPending  = errors.New("invite already pending for this email")
-	ErrInviteEmailMismatch   = errors.New("invite email does not match user email")
-	ErrInviteTokenRequired   = errors.New("invite token is required")
-	ErrProjectNameIsRequired = errors.New("project name is required")
-	ErrCannotRemoveOwner     = errors.New("cannot remove project owner")
+	ErrProjectNotFound       = apperror.New(http.StatusNotFound, "project not found")
+	ErrNotProjectOwner       = apperror.New(http.StatusForbidden, "user is not project owner")
+	ErrNotProjectMember      = apperror.New(http.StatusForbidden, "user is not a member of this project")
+	ErrAlreadyProjectMember  = apperror.New(http.StatusConflict, "user is already project member")
+	ErrProjectNameIsRequired = apperror.New(http.StatusBadRequest, "project name is required")
+	ErrCannotRemoveOwner     = apperror.New(http.StatusForbidden, "cannot remove project owner")
+	ErrNoFieldsToUpdate      = apperror.New(http.StatusBadRequest, "no fields to update")
+	ErrForbidden             = apperror.New(http.StatusForbidden, "forbidden")
 )
 
 type ProjectService struct {
-	db *sql.DB
+	db     *sql.DB
+	repo   repository.ProjectRepository
+	logger *slog.Logger
 }
 
-func NewProjectService(db *sql.DB) *ProjectService {
-	return &ProjectService{
-		db: db,
+func NewProjectService(db *sql.DB, repo repository.ProjectRepository, logger *slog.Logger) *ProjectService {
+	return &ProjectService{db: db, repo: repo, logger: logger}
+}
+
+// RunInTx оборачивает операции в транзакцию для ProjectService
+func (s *ProjectService) RunInTx(ctx context.Context, fn func(tx repository.DBTX) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		s.logger.Error("failed to begin tx", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(tx); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit tx", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+	return nil
 }
 
-// CreateProject создаёт проект и сразу добавляет owner'а в project_members
-func (s *ProjectService) CreateProject(ctx context.Context, ownerID int64, req models.CreateProjectRequest) (*models.Project, error) {
-	name := strings.TrimSpace(req.Name)
-	if name == "" {
+func (s *ProjectService) CreateProject(ctx context.Context, userID int64, req dto.CreateProjectRequest) (*models.Project, error) {
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
 		return nil, ErrProjectNameIsRequired
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
+	p := &models.Project{
+		OwnerID:     userID,
+		Name:        req.Name,
+		Description: req.Description,
+		DeadlineAt:  req.DeadlineAt,
 	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
+
+	err := s.RunInTx(ctx, func(tx repository.DBTX) error {
+		if errTx := s.repo.CreateProject(ctx, tx, p); errTx != nil {
+			return errTx
 		}
-	}()
+		return s.repo.AddProjectMember(ctx, tx, p.ID, userID, "owner")
+	})
 
-	var (
-		project       models.Project
-		descField     sql.NullString
-		deadlineField sql.NullTime
-	)
-
-	var descParam interface{}
-	if req.Description != nil && strings.TrimSpace(*req.Description) != "" {
-		descParam = strings.TrimSpace(*req.Description)
-	} else {
-		descParam = nil
-	}
-
-	var deadlineParam interface{}
-	if req.DeadlineAt != nil {
-		deadlineParam = *req.DeadlineAt
-	} else {
-		deadlineParam = nil
-	}
-
-	query := `
-		INSERT INTO projects (owner_id, name, description, deadline_at)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id, owner_id, name, description, deadline_at, created_at, updated_at;
-	`
-
-	err = tx.QueryRowContext(
-		ctx,
-		query,
-		ownerID,
-		name,
-		descParam,
-		deadlineParam,
-	).Scan(
-		&project.ID,
-		&project.OwnerID,
-		&project.Name,
-		&descField,
-		&deadlineField,
-		&project.CreatedAt,
-		&project.UpdatedAt,
-	)
 	if err != nil {
-		return nil, err
+		s.logger.Error("failed to create project", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if descField.Valid {
-		value := descField.String
-		project.Description = &value
-	}
-
-	if deadlineField.Valid {
-		value := deadlineField.Time
-		project.DeadlineAt = &value
-	}
-
-	_, err = tx.ExecContext(
-		ctx,
-		`INSERT INTO project_members (project_id, user_id, role)
-		 VALUES ($1, $2, 'owner');`,
-		project.ID,
-		ownerID,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-
-	return &project, nil
+	s.logger.Info("project created", slog.Int64("project_id", p.ID), slog.Int64("owner_id", userID))
+	return p, nil
 }
 
-// UpdateProject — частичное обновление проекта
-func (s *ProjectService) UpdateProject(ctx context.Context, ownerID, projectID int64, req models.PatchProjectRequest) (*models.Project, error) {
-	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
-	if err != nil {
-		return nil, err
+func (s *ProjectService) UpdateProject(ctx context.Context, userID, projectID int64, req dto.PatchProjectRequest) (*models.Project, error) {
+	isOwner, err := s.repo.IsProjectOwner(ctx, s.db, projectID, userID)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	} else if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if !isOwner {
 		return nil, ErrNotProjectOwner
 	}
 
-	namePtr := req.Name
-	if namePtr == nil {
-		namePtr = req.ProjectName
-	}
-
-	setParts := make([]string, 0, 6)
-	args := make([]interface{}, 0, 6)
+	setParts := make([]string, 0, 3)
+	args := make([]interface{}, 0, 3)
 	idx := 1
 	changed := false
 
-	if namePtr != nil {
-		name := strings.TrimSpace(*namePtr)
-		if name == "" {
+	nameToUpdate := req.Name
+	if nameToUpdate == nil && req.ProjectName != nil {
+		nameToUpdate = req.ProjectName
+	}
+
+	if nameToUpdate != nil {
+		val := strings.TrimSpace(*nameToUpdate)
+		if val == "" {
 			return nil, ErrProjectNameIsRequired
 		}
 		setParts = append(setParts, fmt.Sprintf("name = $%d", idx))
-		args = append(args, name)
+		args = append(args, val)
 		idx++
 		changed = true
 	}
 
 	if req.Description != nil {
-		d := strings.TrimSpace(*req.Description)
-		if d == "" {
+		val := strings.TrimSpace(*req.Description)
+		if val == "" {
 			setParts = append(setParts, "description = NULL")
 		} else {
 			setParts = append(setParts, fmt.Sprintf("description = $%d", idx))
-			args = append(args, d)
+			args = append(args, val)
 			idx++
 		}
 		changed = true
@@ -182,294 +142,117 @@ func (s *ProjectService) UpdateProject(ctx context.Context, ownerID, projectID i
 		return nil, ErrNoFieldsToUpdate
 	}
 
-	setParts = append(setParts, "updated_at = NOW()")
-
-	args = append(args, projectID)
-	query := fmt.Sprintf(`
-		UPDATE projects
-		SET %s
-		WHERE id = $%d
-		RETURNING id, owner_id, name, description, deadline_at, created_at, updated_at;
-	`, strings.Join(setParts, ", "), idx)
-
-	var (
-		p             models.Project
-		descField     sql.NullString
-		deadlineField sql.NullTime
-	)
-
-	err = s.db.QueryRowContext(ctx, query, args...).Scan(
-		&p.ID,
-		&p.OwnerID,
-		&p.Name,
-		&descField,
-		&deadlineField,
-		&p.CreatedAt,
-		&p.UpdatedAt,
-	)
+	updatedProj, err := s.repo.UpdateProjectDynamic(ctx, s.db, projectID, setParts, args)
 	if err != nil {
-		return nil, fmt.Errorf("update project: %w", err)
+		s.logger.Error("failed to update project", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if descField.Valid {
-		v := descField.String
-		p.Description = &v
-	}
-	if deadlineField.Valid {
-		v := deadlineField.Time
-		p.DeadlineAt = &v
-	}
-
-	return &p, nil
+	return updatedProj, nil
 }
 
-// ListUserProjects возвращает все проекты, где юзер — owner или member
-func (s *ProjectService) ListUserProjects(ctx context.Context, userID int64) ([]models.Project, error) {
-	query := `
-		SELECT DISTINCT
-			p.id,
-			p.owner_id,
-			p.name,
-			p.description,
-			p.deadline_at,
-			p.created_at,
-			p.updated_at
-		FROM projects p
-		LEFT JOIN project_members pm ON pm.project_id = p.id
-		WHERE p.owner_id = $1 OR pm.user_id = $1
-		ORDER BY p.created_at DESC;
-	`
-
-	rows, err := s.db.QueryContext(ctx, query, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	projects := make([]models.Project, 0)
-
-	for rows.Next() {
-		var (
-			project       models.Project
-			descField     sql.NullString
-			deadlineField sql.NullTime
-		)
-
-		err = rows.Scan(
-			&project.ID,
-			&project.OwnerID,
-			&project.Name,
-			&descField,
-			&deadlineField,
-			&project.CreatedAt,
-			&project.UpdatedAt,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if descField.Valid {
-			value := descField.String
-			project.Description = &value
-		}
-
-		if deadlineField.Valid {
-			value := deadlineField.Time
-			project.DeadlineAt = &value
-		}
-
-		projects = append(projects, project)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, err
-	}
-
-	return projects, nil
-}
-
-func (s *ProjectService) isProjectOwner(ctx context.Context, projectID, userID int64) (bool, error) {
-	var ownerID int64
-	err := s.db.QueryRowContext(
-		ctx,
-		`SELECT owner_id FROM projects WHERE id = $1;`,
-		projectID,
-	).Scan(&ownerID)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return false, ErrProjectNotFound
-		}
-		return false, err
-	}
-
-	return ownerID == userID, nil
-}
-
-func (s *ProjectService) isProjectMember(ctx context.Context, projectID, userID int64) (bool, error) {
-	var exists bool
-	err := s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_members
-			WHERE project_id = $1 AND user_id = $2
-		);
-		`,
-		projectID,
-		userID,
-	).Scan(&exists)
-	if err != nil {
-		return false, err
-	}
-
-	return exists, nil
-}
-
-func (s *ProjectService) ensureProjectExists(ctx context.Context, projectID int64) error {
-	var exists bool
-	err := s.db.QueryRowContext(
-		ctx,
-		`SELECT EXISTS(SELECT 1 FROM projects WHERE id = $1);`,
-		projectID,
-	).Scan(&exists)
-	if err != nil {
-		return err
-	}
-	if !exists {
+func (s *ProjectService) DeleteProject(ctx context.Context, userID, projectID int64) error {
+	isOwner, err := s.repo.IsProjectOwner(ctx, s.db, projectID, userID)
+	if err == sql.ErrNoRows {
 		return ErrProjectNotFound
-	}
-	return nil
-}
-
-// DeleteProject удаляет проект. Благодаря ON DELETE CASCADE в БД
-func (s *ProjectService) DeleteProject(ctx context.Context, ownerID, projectID int64) error {
-	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
-	if err != nil {
-		return err
+	} else if err != nil {
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if !isOwner {
 		return ErrNotProjectOwner
 	}
 
-	_, err = s.db.ExecContext(ctx, `DELETE FROM projects WHERE id = $1`, projectID)
-	if err != nil {
-		return fmt.Errorf("delete project: %w", err)
+	if err := s.repo.DeleteProject(ctx, s.db, projectID); err != nil {
+		s.logger.Error("failed to delete project", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
+	s.logger.Info("project deleted", slog.Int64("project_id", projectID))
 	return nil
 }
 
-func (s *ProjectService) GetProjectDetails(ctx context.Context, userID, projectID int64) (*models.ProjectWithStats, error) {
-	if err := s.ensureProjectExists(ctx, projectID); err != nil {
-		return nil, err
+func (s *ProjectService) ListUserProjects(ctx context.Context, userID int64) ([]models.Project, error) {
+	projects, err := s.repo.ListUserProjects(ctx, s.db, userID)
+	if err != nil {
+		s.logger.Error("failed to list user projects", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-	if isMember, err := s.isProjectMember(ctx, projectID, userID); err != nil || !isMember {
-		if err != nil {
-			return nil, err
-		}
+	if projects == nil {
+		projects = []models.Project{}
+	}
+	return projects, nil
+}
+
+func (s *ProjectService) GetProjectDetails(ctx context.Context, userID, projectID int64) (*models.ProjectWithStats, error) {
+	err := s.repo.EnsureProjectExists(ctx, s.db, projectID)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	} else if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	isMember, err := s.repo.IsProjectMember(ctx, s.db, projectID, userID)
+	if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+	if !isMember {
 		return nil, ErrNotProjectMember
 	}
 
-	query := `
-		SELECT 
-			p.id, p.owner_id, p.name, p.description, p.deadline_at,
-			p.created_at, p.updated_at,
-			(SELECT COUNT(*) FROM project_members WHERE project_id = p.id) AS member_count,
-			(SELECT COUNT(*) FROM tasks WHERE project_id = p.id) AS task_count
-		FROM projects p 
-		WHERE p.id = $1;
-	`
-
-	var (
-		stats         models.ProjectWithStats
-		descField     sql.NullString
-		deadlineField sql.NullTime
-	)
-
-	err := s.db.QueryRowContext(ctx, query, projectID).Scan(
-		&stats.ID,
-		&stats.OwnerID,
-		&stats.Name,
-		&descField,
-		&deadlineField,
-		&stats.CreatedAt,
-		&stats.UpdatedAt,
-		&stats.MemberCount,
-		&stats.TaskCount,
-	)
+	stats, err := s.repo.GetProjectDetails(ctx, s.db, projectID)
 	if err == sql.ErrNoRows {
 		return nil, ErrProjectNotFound
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get project details: %w", err)
-	}
-
-	if descField.Valid {
-		v := descField.String
-		stats.Description = &v
-	}
-	if deadlineField.Valid {
-		v := deadlineField.Time
-		stats.DeadlineAt = &v
+	} else if err != nil {
+		s.logger.Error("failed to get project details", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	return &stats, nil
+	return stats, nil
 }
 
-// RemoveMember удаляет участника из проекта
-func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectID, targetUserID int64) error {
-	var ownerID int64
-	err := s.db.QueryRowContext(ctx, `SELECT owner_id FROM projects WHERE id = $1`, projectID).Scan(&ownerID)
-	if err == sql.ErrNoRows {
-		return ErrProjectNotFound
-	}
-	if err != nil {
-		return fmt.Errorf("query project owner: %w", err)
-	}
-
-	isOwner := (requesterID == ownerID)
-	isSelf := (requesterID == targetUserID)
-
-	if !isOwner && !isSelf {
-		return ErrForbidden
-	}
-
+func (s *ProjectService) checkRemovePolicy(requesterID, ownerID, targetUserID int64) error {
 	if targetUserID == ownerID {
 		return ErrCannotRemoveOwner
 	}
+	if requesterID != ownerID && requesterID != targetUserID {
+		return ErrForbidden
+	}
+	return nil
+}
 
-	var exists bool
-	err = s.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = $1 AND user_id = $2)`, projectID, targetUserID).Scan(&exists)
+func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectID, targetUserID int64) error {
+	ownerID, err := s.repo.GetProjectOwnerID(ctx, s.db, projectID)
+	if err == sql.ErrNoRows {
+		return ErrProjectNotFound
+	} else if err != nil {
+		return apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	if err := s.checkRemovePolicy(requesterID, ownerID, targetUserID); err != nil {
+		return err
+	}
+
+	exists, err := s.repo.IsProjectMember(ctx, s.db, projectID, targetUserID)
 	if err != nil {
-		return fmt.Errorf("check member exists: %w", err)
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if !exists {
 		return ErrNotProjectMember
 	}
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return fmt.Errorf("begin tx: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		if errTx := s.repo.RemoveProjectMember(ctx, tx, projectID, targetUserID); errTx != nil {
+			return fmt.Errorf("delete member: %w", errTx)
+		}
+		if errTx := s.repo.RemoveMemberFromTasks(ctx, tx, projectID, targetUserID); errTx != nil {
+			return fmt.Errorf("remove from tasks: %w", errTx)
+		}
+		return nil
+	})
 
-	_, err = tx.ExecContext(ctx, `DELETE FROM project_members WHERE project_id = $1 AND user_id = $2`, projectID, targetUserID)
 	if err != nil {
-		return fmt.Errorf("delete project member: %w", err)
-	}
-
-	_, err = tx.ExecContext(ctx, `
-		DELETE FROM task_assignees 
-		WHERE user_id = $1 
-		  AND task_id IN (SELECT id FROM tasks WHERE project_id = $2)
-	`, targetUserID, projectID)
-	if err != nil {
-		return fmt.Errorf("delete member from task_assignees: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("commit: %w", err)
+		s.logger.Error("failed to remove member", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
 	return nil
