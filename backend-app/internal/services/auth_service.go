@@ -3,166 +3,102 @@ package services
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-	"groupeak/internal/models"
+	"log/slog"
+	"net/http"
 	"strings"
 	"time"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/dto"
+	"groupeak/internal/models"
+	"groupeak/internal/repository"
 
 	"github.com/golang-jwt/jwt/v5"
 	"golang.org/x/crypto/bcrypt"
 )
 
 var (
-	ErrEmailAlreadyTaken      = errors.New("email already taken")
-	ErrInvalidPosition        = errors.New("invalid position")
-	ErrMissingFields          = errors.New("full_name, email and password are required")
-	ErrWeakPassword           = errors.New("password must be at least 8 characters long")
-	ErrInvalidEmail           = errors.New("invalid email format")
-	ErrUnsupportedEmailDomain = errors.New("email domain is not supported")
-	ErrInvalidCredentials     = errors.New("invalid credentials")
-	ErrInvalidBirthDate       = errors.New("invalid birth date, expected format dd.mm.yyyy")
-	ErrBirthDateOutOfRange    = errors.New("birth date must make age between 8 and 100 years")
-	ErrUserNotFound           = errors.New("user not found")
-	ErrPasswordDoNotMatch     = errors.New("confirm_new does not match new_password")
-	ErrNewPasswordSameAsOld   = errors.New("new password must not match old password")
-	ErrEmailSameAsCurrent     = errors.New("new email must not match current email")
-	ErrPasswordIsRequired     = errors.New("password is required")
-	ErrNewEmailIsRequired     = errors.New("new_email is required")
-	ErrNothingToUpdate        = errors.New("nothing to update")
+	ErrEmailAlreadyTaken = apperror.New(http.StatusConflict, "email already taken")
+	ErrInvalidPosition   = apperror.New(http.StatusBadRequest, "invalid position")
+	ErrMissingFields     = apperror.New(http.StatusBadRequest, "full_name, email and password are required")
+	ErrWeakPassword      = apperror.New(http.StatusBadRequest, "password must be at least 8 characters long")
+	ErrUnsupportedEmailDomain = apperror.New(http.StatusBadRequest, "email domain is not supported")
+	ErrInvalidCredentials     = apperror.New(http.StatusUnauthorized, "invalid credentials")
+	ErrInvalidBirthDate       = apperror.New(http.StatusBadRequest, "invalid birth date, expected format dd.mm.yyyy")
+	ErrUserNotFound           = apperror.New(http.StatusNotFound, "user not found")
+	ErrPasswordDoNotMatch     = apperror.New(http.StatusBadRequest, "confirm_new does not match new_password")
+	ErrNewPasswordSameAsOld   = apperror.New(http.StatusBadRequest, "new password must not match old password")
+	ErrEmailSameAsCurrent     = apperror.New(http.StatusBadRequest, "new email must not match current email")
+	ErrPasswordIsRequired     = apperror.New(http.StatusBadRequest, "password is required")
+	ErrNewEmailIsRequired     = apperror.New(http.StatusBadRequest, "new_email is required")
+	ErrNothingToUpdate        = apperror.New(http.StatusBadRequest, "nothing to update")
 )
-
-var allowedDomains = map[string]bool{
-	"yandex.ru":      true,
-	"yandex.com":     true,
-	"ya.ru":          true,
-	"mail.ru":        true,
-	"inbox.ru":       true,
-	"rambler.ru":     true,
-	"gmail.com":      true,
-	"googlemail.com": true,
-	"outlook.com":    true,
-	"icloud.com":     true,
-	"yahoo.com":      true,
-	"mail.com":       true,
-	"sfedu.ru":       true,
-}
 
 type JWTClaims struct {
 	UserID   int64  `json:"user_id"`
-	Email    string `json:"email"`
 	Position string `json:"position"`
 	jwt.RegisteredClaims
 }
 
 type AuthService struct {
-	db       *sql.DB
-	jwtToken []byte
+	db        *sql.DB
+	repo      repository.UserRepository
+	jwtSecret []byte
+	logger    *slog.Logger
 }
 
-func NewAuthService(db *sql.DB, jwtToken string) *AuthService {
+func NewAuthService(db *sql.DB, repo repository.UserRepository, jwtSecret string, logger *slog.Logger) *AuthService {
 	return &AuthService{
-		db:       db,
-		jwtToken: []byte(jwtToken),
+		db:        db,
+		repo:      repo,
+		jwtSecret: []byte(jwtSecret),
+		logger:    logger,
 	}
 }
 
-func normalizeAndValidateEmail(email string) (string, error) {
-	email = strings.ToLower(strings.TrimSpace(email))
-	if email == "" || len(email) < 5 {
-		return "", ErrInvalidEmail
-	}
-	parts := strings.Split(email, "@")
-	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
-		return "", ErrInvalidEmail
-	}
-	domain := parts[1]
-	if !allowedDomains[domain] {
-		return "", ErrUnsupportedEmailDomain
-	}
-	return email, nil
-}
-
-func (s *AuthService) getUserByIDWithPassword(ctx context.Context, userID int64) (models.User, string, error) {
-	var (
-		user           models.User
-		passwordHash   string
-		avatarField    sql.NullString
-		birthDateField sql.NullTime
-		aboutField     sql.NullString
-	)
-
-	err := s.db.QueryRowContext(ctx, `
-		SELECT
-			id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at, password_hash
-		FROM users
-		WHERE id = $1
-	`, userID).Scan(
-		&user.ID,
-		&user.FullName,
-		&avatarField,
-		&user.Email,
-		&user.Position,
-		&birthDateField,
-		&aboutField,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-		&passwordHash,
-	)
-
+func (s *AuthService) RunInTx(ctx context.Context, fn func(tx repository.DBTX) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return models.User{}, "", ErrUserNotFound
-		}
-		return models.User{}, "", fmt.Errorf("select user by id: %w", err)
+		s.logger.Error("failed to begin transaction", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "failed to start transaction")
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	if err := fn(tx); err != nil {
+		return err
 	}
 
-	if avatarField.Valid {
-		user.AvatarURL = &avatarField.String
+	if err := tx.Commit(); err != nil {
+		s.logger.Error("failed to commit transaction", slog.String("error", err.Error()))
+		return apperror.New(http.StatusInternalServerError, "failed to commit transaction")
 	}
-
-	if birthDateField.Valid {
-		bd := birthDateField.Time.Format("02.01.2006")
-		user.BirthDate = &bd
-	}
-
-	if aboutField.Valid {
-		about := aboutField.String
-		user.About = &about
-	}
-
-	return user, passwordHash, nil
+	return nil
 }
 
-func (s *AuthService) generateToken(user models.User) (string, error) {
-	now := time.Now()
-
-	position := ""
-	if user.Position != nil {
-		position = *user.Position
+func (s *AuthService) generateToken(userID int64, position *string) (string, error) {
+	pos := ""
+	if position != nil {
+		pos = *position
 	}
 
 	claims := JWTClaims{
-		UserID:   user.ID,
-		Email:    user.Email,
-		Position: position,
+		UserID:   userID,
+		Position: pos,
 		RegisteredClaims: jwt.RegisteredClaims{
-			Subject:   fmt.Sprint(user.ID),
-			ExpiresAt: jwt.NewNumericDate(now.Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(72 * time.Hour)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signed, err := token.SignedString(s.jwtToken)
-	if err != nil {
-		return "", fmt.Errorf("token.SignedString: %w", err)
-	}
-	return signed, nil
+	return token.SignedString(s.jwtSecret)
 }
 
-func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) (*models.RegisterResponse, error) {
+func (s *AuthService) Register(ctx context.Context, req dto.RegisterRequest) (*dto.RegisterResponse, error) {
 	req.FullName = strings.TrimSpace(req.FullName)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Password = strings.TrimSpace(req.Password)
 
 	if req.FullName == "" || req.Email == "" || req.Password == "" {
 		return nil, ErrMissingFields
@@ -170,23 +106,8 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if len(req.Password) < 8 {
 		return nil, ErrWeakPassword
 	}
-
-	var positionParam interface{}
-	if req.Position != nil {
-		p := strings.TrimSpace(*req.Position)
-
-		if p == "" {
-			positionParam = nil
-			req.Position = nil
-		} else {
-			if !ValidatePosition(&p) {
-				return nil, ErrInvalidPosition
-			}
-			req.Position = &p
-			positionParam = p
-		}
-	} else {
-		positionParam = nil
+	if !ValidatePosition(req.Position) {
+		return nil, ErrInvalidPosition
 	}
 
 	email, err := normalizeAndValidateEmail(req.Email)
@@ -194,249 +115,155 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, err
 	}
 
-	var birthDateParam interface{}
-
-	if req.BirthDate != nil {
-		bdStr := strings.TrimSpace(*req.BirthDate)
-
-		if bdStr != "" {
-			parsed, err := time.Parse("02.01.2006", bdStr)
-			if err != nil {
-				return nil, ErrInvalidBirthDate
-			}
-			if err := ValidateBirthDateAge(parsed); err != nil {
-				return nil, err
-			}
-
-			birthDateParam = parsed
-		} else {
-			birthDateParam = nil
+	if req.BirthDate != nil && *req.BirthDate != "" {
+		bd, err := time.Parse("02.01.2006", *req.BirthDate)
+		if err != nil {
+			return nil, ErrInvalidBirthDate
 		}
+		if err := ValidateBirthDateAge(bd); err != nil {
+			return nil, err
+		}
+		formattedBD := bd.Format("2006-01-02")
+		req.BirthDate = &formattedBD
 	} else {
-		birthDateParam = nil
-	}
-
-	var aboutParam interface{}
-	if req.About != nil && strings.TrimSpace(*req.About) != "" {
-		aboutParam = strings.TrimSpace(*req.About)
-	} else {
-		aboutParam = nil
-	}
-
-	var exists bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`,
-		email,
-	).Scan(&exists)
-	if err != nil {
-		return nil, fmt.Errorf("check email exists: %w", err)
-	}
-	if exists {
-		return nil, ErrEmailAlreadyTaken
+		req.BirthDate = nil
 	}
 
 	passwordHash, err := HashPassword(req.Password)
 	if err != nil {
+		s.logger.Error("failed to hash password", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	user := &models.User{
+		FullName:  req.FullName,
+		Email:     email,
+		Position:  req.Position,
+		AvatarURL: req.AvatarURL,
+		BirthDate: req.BirthDate,
+		About:     req.About,
+	}
+
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		exists, errTx := s.repo.CheckEmailExists(ctx, tx, email)
+		if errTx != nil {
+			return fmt.Errorf("check email: %w", errTx)
+		}
+		if exists {
+			return ErrEmailAlreadyTaken
+		}
+
+		if errTx := s.repo.CreateUser(ctx, tx, user, passwordHash); errTx != nil {
+			return fmt.Errorf("create user: %w", errTx)
+		}
+		return nil
+	})
+
+	if err != nil {
+		s.logger.Error("failed to register user", slog.String("email", email), slog.String("error", err.Error()))
 		return nil, err
 	}
 
-	query := `
-	INSERT INTO users (full_name, avatar_url, email, password_hash, position, birth_date, about)
-	VALUES ($1, $2, $3, $4, $5, $6, $7)
-	RETURNING id, full_name, avatar_url, email, position, birth_date, about, created_at, updated_at;
-	`
-
-	var (
-		user           models.User
-		avatarField    sql.NullString
-		avatarParam    interface{}
-		positionField  sql.NullString
-		birthDateField sql.NullTime
-		aboutField     sql.NullString
-	)
-
-	if req.AvatarURL != nil && strings.TrimSpace(*req.AvatarURL) != "" {
-		avatarParam = strings.TrimSpace(*req.AvatarURL)
-	} else {
-		avatarParam = nil
-	}
-
-	err = s.db.QueryRowContext(
-		ctx,
-		query,
-		req.FullName,
-		avatarParam,
-		email,
-		passwordHash,
-		positionParam,
-		birthDateParam,
-		aboutParam,
-	).Scan(
-		&user.ID,
-		&user.FullName,
-		&avatarField,
-		&user.Email,
-		&positionField,
-		&birthDateField,
-		&aboutField,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+	token, err := s.generateToken(user.ID, user.Position)
 	if err != nil {
-		return nil, fmt.Errorf("insert user: %w", err)
+		s.logger.Error("failed to generate token during registration", slog.Int64("user_id", user.ID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if avatarField.Valid {
-		user.AvatarURL = &avatarField.String
+	if req.BirthDate != nil {
+		bd, _ := time.Parse("2006-01-02", *req.BirthDate)
+		formatted := bd.Format("02.01.2006")
+		user.BirthDate = &formatted
 	}
 
-	if positionField.Valid {
-		p := positionField.String
-		user.Position = &p
-	} else {
-		user.Position = nil
-	}
+	s.logger.Info("user successfully registered", slog.Int64("user_id", user.ID), slog.String("email", user.Email))
 
-	if birthDateField.Valid {
-		bd := birthDateField.Time.Format("02.01.2006")
-		user.BirthDate = &bd
-	}
-
-	if aboutField.Valid {
-		about := aboutField.String
-		user.About = &about
-	}
-
-	token, err := s.generateToken(user)
-	if err != nil {
-		return nil, fmt.Errorf("generate token: %w", err)
-	}
-
-	resp := &models.RegisterResponse{
-		User:  user,
-		Token: token,
-	}
-	return resp, nil
+	return &dto.RegisterResponse{User: *user, Token: token}, nil
 }
 
-func (s *AuthService) Login(ctx context.Context, req models.LoginRequest) (*models.LoginResponse, error) {
+func (s *AuthService) Login(ctx context.Context, req dto.LoginRequest) (*dto.LoginResponse, error) {
 	email, err := normalizeAndValidateEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
 
-	var (
-		user           models.User
-		passwordHash   string
-		avatarField    sql.NullString
-		birthDateField sql.NullTime
-		aboutField     sql.NullString
-	)
-
-	err = s.db.QueryRowContext(ctx,
-		`SELECT id, full_name, avatar_url, email, position, birth_date, about, password_hash, created_at, updated_at
-		FROM users WHERE email = $1`,
-		email,
-	).Scan(
-		&user.ID,
-		&user.FullName,
-		&avatarField,
-		&user.Email,
-		&user.Position,
-		&birthDateField,
-		&aboutField,
-		&passwordHash,
-		&user.CreatedAt,
-		&user.UpdatedAt,
-	)
+	user, hash, err := s.repo.GetUserByEmail(ctx, s.db, email)
 	if err == sql.ErrNoRows {
+		s.logger.Warn("failed login attempt: user not found", slog.String("email", email))
 		return nil, ErrInvalidCredentials
 	} else if err != nil {
-		return nil, fmt.Errorf("query user: %w", err)
+		s.logger.Error("db error during login", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if avatarField.Valid {
-		user.AvatarURL = &avatarField.String
-	}
-	if birthDateField.Valid {
-		bd := birthDateField.Time.Format("02.01.2006")
-		user.BirthDate = &bd
-	}
-	if aboutField.Valid {
-		about := aboutField.String
-		user.About = &about
-	}
-
-	err = bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
+		s.logger.Warn("failed login attempt: incorrect password", slog.String("email", email))
 		return nil, ErrInvalidCredentials
 	}
 
-	token, err := s.generateToken(user)
+	token, err := s.generateToken(user.ID, user.Position)
 	if err != nil {
-		return nil, fmt.Errorf("generate token: %w", err)
+		s.logger.Error("failed to generate token during login", slog.Int64("user_id", user.ID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	return &models.LoginResponse{
-		User:  user,
-		Token: token,
-	}, nil
+	s.logger.Info("user successfully logged in", slog.Int64("user_id", user.ID))
+
+	return &dto.LoginResponse{User: *user, Token: token}, nil
 }
 
-func (s *AuthService) ChangePassword(ctx context.Context, userID int64, req models.ChangePasswordRequest) (*models.ChangePasswordResponse, error) {
-	req.OldPassword = strings.TrimSpace(req.OldPassword)
-	req.NewPassword = strings.TrimSpace(req.NewPassword)
-	req.ConfirmNew = strings.TrimSpace(req.ConfirmNew)
-
+func (s *AuthService) ChangePassword(ctx context.Context, userID int64, req dto.ChangePasswordRequest) (*dto.ChangePasswordResponse, error) {
 	if req.OldPassword == "" || req.NewPassword == "" || req.ConfirmNew == "" {
 		return nil, ErrMissingFields
-	}
-	if len(req.NewPassword) < 8 {
-		return nil, ErrWeakPassword
-	}
-	if req.NewPassword == req.OldPassword {
-		return nil, ErrNewPasswordSameAsOld
 	}
 	if req.NewPassword != req.ConfirmNew {
 		return nil, ErrPasswordDoNotMatch
 	}
-
-	user, passwordHash, err := s.getUserByIDWithPassword(ctx, userID)
-	if err != nil {
-		return nil, err
+	if req.OldPassword == req.NewPassword {
+		return nil, ErrNewPasswordSameAsOld
+	}
+	if len(req.NewPassword) < 8 {
+		return nil, ErrWeakPassword
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.OldPassword)); err != nil {
+	user, currentHash, err := s.repo.GetUserByID(ctx, s.db, userID)
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	} else if err != nil {
+		s.logger.Error("failed to get user for password change", slog.Int64("user_id", userID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(currentHash), []byte(req.OldPassword)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
 	newHash, err := HashPassword(req.NewPassword)
 	if err != nil {
-		return nil, err
+		s.logger.Error("failed to hash new password", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	_, err = s.db.ExecContext(ctx, `
-		UPDATE users
-		SET password_hash = $1, updated_at = NOW()
-		WHERE id = $2
-	`, newHash, userID)
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		return s.repo.UpdatePassword(ctx, tx, userID, newHash)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("update password: %w", err)
+		s.logger.Error("failed to update password in DB", slog.Int64("user_id", userID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	token, err := s.generateToken(user)
+	token, err := s.generateToken(user.ID, user.Position)
 	if err != nil {
-		return nil, fmt.Errorf("generate token: %w", err)
+		s.logger.Error("failed to generate new token after password change", slog.Int64("user_id", userID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	return &models.ChangePasswordResponse{
-		User:  user,
-		Token: token,
-	}, nil
+	s.logger.Info("user successfully changed password", slog.Int64("user_id", userID))
+
+	return &dto.ChangePasswordResponse{User: *user, Token: token}, nil
 }
 
-func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.ChangeEmailRequest) (*models.ChangeEmailResponse, error) {
+func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req dto.ChangeEmailRequest) (*dto.ChangeEmailResponse, error) {
 	req.NewEmail = strings.TrimSpace(req.NewEmail)
 	req.Password = strings.TrimSpace(req.Password)
 
@@ -452,12 +279,15 @@ func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.
 		return nil, err
 	}
 
-	user, passwordHash, err := s.getUserByIDWithPassword(ctx, userID)
-	if err != nil {
-		return nil, err
+	user, hash, err := s.repo.GetUserByID(ctx, s.db, userID)
+	if err == sql.ErrNoRows {
+		return nil, ErrUserNotFound
+	} else if err != nil {
+		s.logger.Error("failed to get user for email change", slog.Int64("user_id", userID), slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(req.Password)); err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(req.Password)); err != nil {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -465,36 +295,29 @@ func (s *AuthService) ChangeEmail(ctx context.Context, userID int64, req models.
 		return nil, ErrEmailSameAsCurrent
 	}
 
-	var exists bool
-	err = s.db.QueryRowContext(ctx,
-		`SELECT EXISTS (SELECT 1 FROM users WHERE email = $1)`,
-		newEmail,
-	).Scan(&exists)
-	if err != nil {
-		return nil, fmt.Errorf("check email exists: %w", err)
-	}
-	if exists {
-		return nil, ErrEmailAlreadyTaken
-	}
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		exists, errTx := s.repo.CheckEmailExists(ctx, tx, newEmail)
+		if errTx != nil {
+			return errTx
+		}
+		if exists {
+			return ErrEmailAlreadyTaken
+		}
+		return s.repo.UpdateEmail(ctx, tx, userID, newEmail)
+	})
 
-	_, err = s.db.ExecContext(ctx, `
-		UPDATE users
-		SET email = $1, updated_at = NOW()
-		WHERE id = $2
-	`, newEmail, userID)
 	if err != nil {
-		return nil, fmt.Errorf("update email: %w", err)
+		s.logger.Error("failed to change email in DB", slog.Int64("user_id", userID), slog.String("error", err.Error()))
+		return nil, err
 	}
 
 	user.Email = newEmail
-
-	token, err := s.generateToken(user)
+	token, err := s.generateToken(user.ID, user.Position)
 	if err != nil {
-		return nil, fmt.Errorf("generate token: %w", err)
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	return &models.ChangeEmailResponse{
-		User:  user,
-		Token: token,
-	}, nil
+	s.logger.Info("user successfully changed email", slog.Int64("user_id", userID), slog.String("new_email", newEmail))
+
+	return &dto.ChangeEmailResponse{User: *user, Token: token}, nil
 }
