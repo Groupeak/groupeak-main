@@ -4,30 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"errors"
 	"fmt"
-	"groupeak/internal/models"
-	"groupeak/internal/services"
 	"net/http"
 	"path/filepath"
 	"strings"
 
-	"github.com/minio/minio-go/v7"
-)
+	"groupeak/internal/dto"
 
-var (
-	ErrUnauthorized         = errors.New("unauthorized")
-	ErrFileTooLarge         = errors.New("file too large or invalid form data (max 8MB)")
-	ErrFailedToGetFile      = errors.New("failed to get avatar file")
-	ErrUnsupportedFormat    = errors.New("unsupported file format. Allowed: jpg, jpeg, png, webp, heic, heif")
-	ErrUploadStorageFailed  = errors.New("failed to upload image to storage")
-	ErrSaveAvatarDBFailed   = errors.New("failed to save avatar url in database")
-	ErrUserNotFound         = errors.New("user not found")
-	ErrInternalServerErrorU = errors.New("internal server error")
-	ErrInvalidJSONBody      = errors.New("invalid JSON body")
-	ErrNoFieldsToUpdate     = errors.New("no fields to update")
-	ErrFullNameEmpty        = errors.New("full name cannot be empty")
-	ErrDeleteAvatarDBFailed = errors.New("failed to delete avatar from database")
+	"github.com/minio/minio-go/v7"
 )
 
 func generateRandomFileName(ext string) string {
@@ -49,7 +33,7 @@ var allowedAvatarExts = map[string]string{
 func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		WriteError(w, http.StatusUnauthorized, ErrUnauthorized.Error())
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -58,14 +42,15 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	if err == nil && userProfile.AvatarURL != nil {
 		oldAvatarUrl = *userProfile.AvatarURL
 	}
+
 	if err := r.ParseMultipartForm(8 << 20); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrFileTooLarge.Error())
+		WriteError(w, http.StatusBadRequest, "file too large or invalid form data (max 8MB)")
 		return
 	}
 
 	file, header, err := r.FormFile("avatar")
 	if err != nil {
-		WriteError(w, http.StatusBadRequest, ErrFailedToGetFile.Error())
+		WriteError(w, http.StatusBadRequest, "failed to get avatar file")
 		return
 	}
 	defer file.Close()
@@ -73,7 +58,7 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	ext := strings.ToLower(filepath.Ext(header.Filename))
 	contentType, isAllowed := allowedAvatarExts[ext]
 	if !isAllowed {
-		WriteError(w, http.StatusBadRequest, ErrUnsupportedFormat.Error())
+		WriteError(w, http.StatusBadRequest, "unsupported file format. Allowed: jpg, jpeg, png, webp, heic, heif")
 		return
 	}
 
@@ -83,7 +68,7 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		ContentType: contentType,
 	})
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrUploadStorageFailed.Error())
+		WriteError(w, http.StatusInternalServerError, "failed to upload image to storage")
 		return
 	}
 
@@ -99,7 +84,7 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 		go func() {
 			_ = h.minioClient.RemoveObject(context.Background(), h.bucketName, fileName, minio.RemoveObjectOptions{})
 		}()
-		WriteError(w, http.StatusInternalServerError, ErrSaveAvatarDBFailed.Error())
+		HandleError(w, err)
 		return
 	}
 
@@ -123,13 +108,13 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		WriteError(w, http.StatusUnauthorized, ErrUnauthorized.Error())
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	userProfile, err := h.authService.GetProfile(r.Context(), userID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrInternalServerError.Error())
+		HandleError(w, err)
 		return
 	}
 
@@ -144,7 +129,7 @@ func (h *AuthHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 
 	err = h.authService.DeleteAvatarURL(r.Context(), userID)
 	if err != nil {
-		WriteError(w, http.StatusInternalServerError, ErrDeleteAvatarDBFailed.Error())
+		HandleError(w, err)
 		return
 	}
 
@@ -166,29 +151,19 @@ func (h *AuthHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		WriteError(w, http.StatusUnauthorized, ErrUnauthorized.Error())
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	user, err := h.authService.GetProfile(r.Context(), userID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrUserNotFound):
-			WriteError(w, http.StatusNotFound, ErrUserNotFound.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, ErrInternalServerErrorU.Error())
-		}
+		HandleError(w, err)
 		return
 	}
 
 	stats, err := h.authService.GetTaskStats(r.Context(), userID)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrUserNotFound):
-			WriteError(w, http.StatusNotFound, ErrUserNotFound.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, ErrInternalServerErrorU.Error())
-		}
+		HandleError(w, err)
 		return
 	}
 
@@ -202,30 +177,19 @@ func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
-		WriteError(w, http.StatusUnauthorized, ErrUnauthorized.Error())
+		WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
-	var req models.UpdateProfileRequest
+	var req dto.UpdateProfileRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
-		WriteError(w, http.StatusBadRequest, ErrInvalidJSONBody.Error())
+		WriteError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
 	resp, err := h.authService.UpdateProfile(r.Context(), userID, req)
 	if err != nil {
-		switch {
-		case errors.Is(err, services.ErrInvalidBirthDate):
-			WriteError(w, http.StatusBadRequest, err.Error())
-		case errors.Is(err, services.ErrBirthDateOutOfRange):
-			WriteError(w, http.StatusBadRequest, err.Error())
-		case err.Error() == "no fields to update":
-			WriteError(w, http.StatusBadRequest, ErrNoFieldsToUpdate.Error())
-		case err.Error() == "full name cannot be empty":
-			WriteError(w, http.StatusBadRequest, ErrFullNameEmpty.Error())
-		default:
-			WriteError(w, http.StatusInternalServerError, ErrInternalServerErrorU.Error())
-		}
+		HandleError(w, err)
 		return
 	}
 
