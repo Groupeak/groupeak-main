@@ -14,26 +14,3 @@ type Event struct {
 	UpdatedAt      time.Time  `json:"updated_at"`
 	ParticipantIDs []int      `json:"participant_ids"`
 }
-
-type CreateEventRequest struct {
-	Title          string     `json:"title"`
-	MeetingURL     *string    `json:"meeting_url"`
-	Description    *string    `json:"description"`
-	StartAt        time.Time  `json:"start_at"`
-	EndAt          *time.Time `json:"end_at"`
-	ParticipantIDs []int      `json:"participant_ids"`
-}
-
-type UpdateEventRequest struct {
-	Title          *string    `json:"title"`
-	MeetingURL     *string    `json:"meeting_url"`
-	Description    *string    `json:"description"`
-	StartAt        *time.Time `json:"start_at"`
-	EndAt          *time.Time `json:"end_at"`
-	ParticipantIDs []int      `json:"participant_ids"`
-}
-
-type EventWithParticipants struct {
-	Event
-	Participants []int `json:"participants"`
-}
