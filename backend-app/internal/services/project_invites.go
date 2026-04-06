@@ -3,16 +3,29 @@ package services
 import (
 	"context"
 	"database/sql"
-	"fmt"
+	"log/slog"
+	"net/http"
+
+	"groupeak/internal/apperror"
+	"groupeak/internal/dto"
 	"groupeak/internal/models"
-	"strings"
+	"groupeak/internal/repository"
 )
 
-// InviteMember создаёт инвайт по email
-func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID int64, req models.InviteMemberRequest) (*models.ProjectInvite, error) {
-	isOwner, err := s.isProjectOwner(ctx, projectID, ownerID)
-	if err != nil {
-		return nil, err
+var (
+	ErrInviteNotFound       = apperror.New(http.StatusNotFound, "invite not found")
+	ErrInviteAlreadyUsed    = apperror.New(http.StatusConflict, "invite is already used or revoked")
+	ErrInviteAlreadyPending = apperror.New(http.StatusConflict, "invite already pending for this email")
+	ErrInviteEmailMismatch  = apperror.New(http.StatusForbidden, "invite email does not match user email")
+	ErrInviteTokenRequired  = apperror.New(http.StatusBadRequest, "invite token is required")
+)
+
+func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID int64, req dto.InviteMemberRequest) (*models.ProjectInvite, error) {
+	isOwner, err := s.repo.IsProjectOwner(ctx, s.db, projectID, ownerID)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	} else if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if !isOwner {
 		return nil, ErrNotProjectOwner
@@ -23,278 +36,112 @@ func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID in
 		return nil, err
 	}
 
-	var alreadyMember bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_members pm
-			JOIN users u ON u.id = pm.user_id
-			WHERE pm.project_id = $1 AND u.email = $2
-		);
-		`,
-		projectID,
-		email,
-	).Scan(&alreadyMember)
+	alreadyMember, err := s.repo.CheckUserIsMemberByEmail(ctx, s.db, projectID, email)
 	if err != nil {
-		return nil, err
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if alreadyMember {
 		return nil, ErrAlreadyProjectMember
 	}
 
-	var existingInviteID int64
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT id
-		FROM project_invites
-		WHERE project_id = $1 AND email = $2 AND status = 'pending';
-		`,
-		projectID,
-		email,
-	).Scan(&existingInviteID)
-	if err != nil && err != sql.ErrNoRows {
-		return nil, err
+	hasPending, err := s.repo.CheckPendingInvite(ctx, s.db, projectID, email)
+	if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-	if err == nil {
+	if hasPending {
 		return nil, ErrInviteAlreadyPending
 	}
 
 	token, err := generateInviteToken()
 	if err != nil {
-		return nil, fmt.Errorf("generate invite token: %w", err)
+		s.logger.Error("failed to generate invite token", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	var invite models.ProjectInvite
-
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		INSERT INTO project_invites (project_id, email, token, status)
-		VALUES ($1, $2, $3, 'pending')
-		RETURNING id, project_id, email, token, status, created_at, updated_at;
-		`,
-		projectID,
-		email,
-		token,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
+	invite := &models.ProjectInvite{
+		ProjectID: projectID,
+		Email:     email,
+		Token:     token,
 	}
 
-	return &invite, nil
+	if err := s.repo.CreateInvite(ctx, s.db, invite); err != nil {
+		s.logger.Error("failed to create invite in DB", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	s.logger.Info("invite created", slog.Int64("project_id", projectID), slog.String("email", email))
+	return invite, nil
 }
 
-// AcceptInvite по токену добавляет юзера в project_members и помечает инвайт как accepted
 func (s *ProjectService) AcceptInvite(ctx context.Context, userID int64, token string) (*models.ProjectInvite, error) {
-	token = strings.TrimSpace(token)
 	if token == "" {
 		return nil, ErrInviteTokenRequired
 	}
 
-	var userEmail string
-	err := s.db.QueryRowContext(
-		ctx,
-		`SELECT email FROM users WHERE id = $1;`,
-		userID,
-	).Scan(&userEmail)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
-		}
-		return nil, err
-	}
-
-	var invite models.ProjectInvite
-
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT id, project_id, email, token, status, created_at, updated_at
-		FROM project_invites
-		WHERE token = $1;
-		`,
-		token,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, ErrInviteNotFound
-		}
-		return nil, err
+	invite, err := s.repo.GetInviteByToken(ctx, s.db, token)
+	if err == sql.ErrNoRows {
+		return nil, ErrInviteNotFound
+	} else if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
 	if invite.Status != "pending" {
 		return nil, ErrInviteAlreadyUsed
 	}
 
-	if !strings.EqualFold(invite.Email, userEmail) {
+	userEmail, err := s.repo.GetUserEmail(ctx, s.db, userID)
+	if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
+	}
+
+	if invite.Email != userEmail {
 		return nil, ErrInviteEmailMismatch
 	}
 
-	var alreadyMember bool
-	err = s.db.QueryRowContext(
-		ctx,
-		`
-		SELECT EXISTS(
-			SELECT 1
-			FROM project_members
-			WHERE project_id = $1 AND user_id = $2
-		);
-		`,
-		invite.ProjectID,
-		userID,
-	).Scan(&alreadyMember)
-	if err != nil {
-		return nil, err
-	}
-	if alreadyMember {
-		return nil, ErrAlreadyProjectMember
-	}
+	var updatedInvite *models.ProjectInvite
 
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			_ = tx.Rollback()
+	err = s.RunInTx(ctx, func(tx repository.DBTX) error {
+		if errTx := s.repo.AddProjectMember(ctx, tx, invite.ProjectID, userID, "member"); errTx != nil {
+			return errTx
 		}
-	}()
+		var errTx error
+		updatedInvite, errTx = s.repo.UpdateInviteStatus(ctx, tx, invite.ID, "accepted")
+		return errTx
+	})
 
-	_, err = tx.ExecContext(
-		ctx,
-		`
-		INSERT INTO project_members (project_id, user_id, role)
-		VALUES ($1, $2, 'member');
-		`,
-		invite.ProjectID,
-		userID,
-	)
 	if err != nil {
-		return nil, err
+		s.logger.Error("failed to accept invite", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	err = tx.QueryRowContext(
-		ctx,
-		`
-		UPDATE project_invites
-		SET status = 'accepted', updated_at = NOW()
-		WHERE id = $1
-		RETURNING id, project_id, email, token, status, created_at, updated_at;
-		`,
-		invite.ID,
-	).Scan(
-		&invite.ID,
-		&invite.ProjectID,
-		&invite.Email,
-		&invite.Token,
-		&invite.Status,
-		&invite.CreatedAt,
-		&invite.UpdatedAt,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return nil, err
-	}
-
-	return &invite, nil
+	s.logger.Info("invite accepted", slog.Int64("user_id", userID), slog.Int64("project_id", invite.ProjectID))
+	return updatedInvite, nil
 }
 
-// ListProjectMembers возвращает список участников проекта с данными пользователя
 func (s *ProjectService) ListProjectMembers(ctx context.Context, userID, projectID int64) ([]models.ProjectMemberWithUser, error) {
-	err := s.ensureProjectExists(ctx, projectID)
-	if err != nil {
-		return nil, err
+	err := s.repo.EnsureProjectExists(ctx, s.db, projectID)
+	if err == sql.ErrNoRows {
+		return nil, ErrProjectNotFound
+	} else if err != nil {
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	isMember, err := s.isProjectMember(ctx, projectID, userID)
+	isMember, err := s.repo.IsProjectMember(ctx, s.db, projectID, userID)
 	if err != nil {
-		return nil, err
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 	if !isMember {
 		return nil, ErrNotProjectMember
 	}
 
-	query := `
-		SELECT
-			pm.id,
-			pm.project_id,
-			pm.user_id,
-			pm.role,
-			pm.created_at,
-			COALESCE(u.full_name, '') as full_name,
-			u.email,
-			COALESCE(u.position, '') as position,
-			u.avatar_url
-		FROM project_members pm
-		JOIN users u ON u.id = pm.user_id
-		WHERE pm.project_id = $1
-		ORDER BY
-			CASE pm.role WHEN 'owner' THEN 0 ELSE 1 END,
-			COALESCE(u.full_name, '');
-	`
-
-	rows, err := s.db.QueryContext(ctx, query, projectID)
+	members, err := s.repo.ListProjectMembers(ctx, s.db, projectID)
 	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	members := make([]models.ProjectMemberWithUser, 0)
-
-	for rows.Next() {
-		var (
-			member      models.ProjectMemberWithUser
-			avatarField sql.NullString
-		)
-
-		err = rows.Scan(
-			&member.ID,
-			&member.ProjectID,
-			&member.UserID,
-			&member.Role,
-			&member.CreatedAt,
-			&member.FullName,
-			&member.Email,
-			&member.Position,
-			&avatarField,
-		)
-		if err != nil {
-			return nil, err
-		}
-
-		if avatarField.Valid {
-			value := avatarField.String
-			member.AvatarURL = &value
-		}
-
-		members = append(members, member)
+		s.logger.Error("failed to list project members", slog.String("error", err.Error()))
+		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, err
+	if members == nil {
+		members = []models.ProjectMemberWithUser{}
 	}
 
 	return members, nil
