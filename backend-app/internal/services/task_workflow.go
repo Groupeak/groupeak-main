@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"groupeak/internal/apperror"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/models"
 	"groupeak/internal/repository"
 )
@@ -50,6 +51,18 @@ func (s *TaskService) TakeTask(ctx context.Context, userID, taskID int64) (*mode
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
+	// Отправляем событие о том, что задачу взяли в работу
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeTaskUpdated,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  taskID,
+		Payload: map[string]interface{}{
+			"status_changed": true,
+			"new_status":     string(models.TaskStatusInProgress),
+		},
+	})
+
 	return updatedTask, nil
 }
 
@@ -72,6 +85,19 @@ func (s *TaskService) SubmitForReview(ctx context.Context, userID, projectID, ta
 	}
 
 	s.logger.Info("task submitted for review", slog.Int64("task_id", taskID), slog.Int64("user_id", userID))
+
+	// Отправляем событие о том, что задача ушла на проверку
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeTaskUpdated,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  taskID,
+		Payload: map[string]interface{}{
+			"status_changed": true,
+			"new_status":     string(models.TaskStatusReview),
+		},
+	})
+
 	return nil
 }
 
@@ -96,6 +122,23 @@ func (s *TaskService) ReviewTask(ctx context.Context, ownerID, projectID, taskID
 			return ErrTaskNotFoundOrBadStatus
 		}
 		s.logger.Info("task approved", slog.Int64("task_id", taskID))
+
+		// Собираем payload для approve
+		payload := map[string]interface{}{
+			"decision": "approve",
+		}
+		if comment != nil {
+			payload["comment"] = *comment
+		}
+
+		s.bus.Publish(eventbus.SystemEvent{
+			Type:      models.EventTypeTaskReviewed,
+			ProjectID: projectID,
+			ActorID:   ownerID,
+			EntityID:  taskID,
+			Payload:   payload,
+		})
+
 		return nil
 
 	case "reject":
@@ -112,6 +155,24 @@ func (s *TaskService) ReviewTask(ctx context.Context, ownerID, projectID, taskID
 			return ErrTaskNotFoundOrBadStatus
 		}
 		s.logger.Info("task rejected", slog.Int64("task_id", taskID))
+
+		// Собираем payload для reject
+		payload := map[string]interface{}{
+			"decision":   "reject",
+			"new_due_at": newDueAt,
+		}
+		if comment != nil {
+			payload["comment"] = *comment
+		}
+
+		s.bus.Publish(eventbus.SystemEvent{
+			Type:      models.EventTypeTaskReviewed,
+			ProjectID: projectID,
+			ActorID:   ownerID,
+			EntityID:  taskID,
+			Payload:   payload,
+		})
+
 		return nil
 
 	default:

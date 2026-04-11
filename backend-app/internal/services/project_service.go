@@ -10,6 +10,7 @@ import (
 
 	"groupeak/internal/apperror"
 	"groupeak/internal/dto"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/models"
 	"groupeak/internal/repository"
 )
@@ -29,10 +30,11 @@ type ProjectService struct {
 	db     *sql.DB
 	repo   repository.ProjectRepository
 	logger *slog.Logger
+	bus    *eventbus.EventBus
 }
 
-func NewProjectService(db *sql.DB, repo repository.ProjectRepository, logger *slog.Logger) *ProjectService {
-	return &ProjectService{db: db, repo: repo, logger: logger}
+func NewProjectService(db *sql.DB, repo repository.ProjectRepository, logger *slog.Logger, bus *eventbus.EventBus) *ProjectService {
+	return &ProjectService{db: db, repo: repo, logger: logger, bus: bus}
 }
 
 // RunInTx оборачивает операции в транзакцию для ProjectService
@@ -254,6 +256,18 @@ func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectI
 		s.logger.Error("failed to remove member", slog.String("error", err.Error()))
 		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
+
+	// Отправляем событие о том, что пользователя удалили из проекта
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeProjectKicked,
+		ProjectID: projectID,
+		ActorID:   requesterID, // Тот, кто удалил (Owner или сам юзер)
+		EntityID:  targetUserID,
+		Payload: map[string]interface{}{
+			"target_user_id": targetUserID,
+			"action":         "kicked",
+		},
+	})
 
 	return nil
 }

@@ -8,6 +8,7 @@ import (
 
 	"groupeak/internal/apperror"
 	"groupeak/internal/dto"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/models"
 	"groupeak/internal/repository"
 )
@@ -115,6 +116,23 @@ func (s *ProjectService) AcceptInvite(ctx context.Context, userID int64, token s
 	}
 
 	s.logger.Info("invite accepted", slog.Int64("user_id", userID), slog.Int64("project_id", invite.ProjectID))
+
+	// Узнаем владельца проекта, чтобы назначить его ActorID.
+	// Так юзер получит уведомление (ведь мы не шлем уведомления самому себе).
+	ownerID, _ := s.repo.GetProjectOwnerID(ctx, s.db, invite.ProjectID)
+
+	// Отправляем событие о том, что юзер присоединился к проекту
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeProjectMember,
+		ProjectID: invite.ProjectID,
+		ActorID:   ownerID,
+		EntityID:  userID,
+		Payload: map[string]interface{}{
+			"target_user_id": userID,
+			"action":         "joined",
+		},
+	})
+
 	return updatedInvite, nil
 }
 

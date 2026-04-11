@@ -11,11 +11,11 @@ import (
 
 	"groupeak/internal/apperror"
 	"groupeak/internal/dto"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/models"
 	"groupeak/internal/repository"
 )
 
-// Кастомные ошибки с привязкой к HTTP статусам
 var (
 	ErrTaskNotFound            = apperror.New(http.StatusNotFound, "task not found")
 	ErrInvalidTaskStatus       = apperror.New(http.StatusBadRequest, "invalid task status for this operation")
@@ -37,10 +37,11 @@ type TaskService struct {
 	db     *sql.DB
 	repo   repository.TaskRepository
 	logger *slog.Logger
+	bus    *eventbus.EventBus
 }
 
-func NewTaskService(db *sql.DB, repo repository.TaskRepository, logger *slog.Logger) *TaskService {
-	return &TaskService{db: db, repo: repo, logger: logger}
+func NewTaskService(db *sql.DB, repo repository.TaskRepository, logger *slog.Logger, bus *eventbus.EventBus) *TaskService {
+	return &TaskService{db: db, repo: repo, logger: logger, bus: bus}
 }
 
 // RunInTx оборачивает операции в транзакцию
@@ -83,7 +84,6 @@ func (s *TaskService) validateTaskFields(title string, desc *string) error {
 	return nil
 }
 
-// Вставить/заменить в task_service.go
 func (s *TaskService) CreateTask(ctx context.Context, userID, projectID int64, req dto.CreateTaskRequest) (*models.Task, error) {
 	ok, err := s.IsProjectOwner(ctx, projectID, userID)
 	if err != nil {
@@ -106,7 +106,6 @@ func (s *TaskService) CreateTask(ctx context.Context, userID, projectID int64, r
 		return nil, ErrDueDateInPast
 	}
 
-	// Строгая валидация статуса и приоритета
 	if req.Status != "" && req.Status != models.TaskStatusTodo && req.Status != models.TaskStatusInProgress && req.Status != models.TaskStatusDone && req.Status != models.TaskStatusPostponed && req.Status != models.TaskStatusReview {
 		return nil, ErrInvalidTaskStatusValue
 	}
@@ -162,6 +161,13 @@ func (s *TaskService) CreateTask(ctx context.Context, userID, projectID int64, r
 		return nil, err
 	}
 
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeTaskCreated,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  task.ID,
+		Payload:   map[string]interface{}{"title": task.Title},
+	})
 	return task, nil
 }
 
@@ -182,6 +188,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 	setParts := make([]string, 0)
 	args := make([]interface{}, 0)
 	idx := 1
+	changes := make(map[string]interface{}) // Собираем изменения для уведомления
 
 	titleToUpdate := req.Title
 	if titleToUpdate == nil && req.TaskName != nil {
@@ -198,6 +205,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 		setParts = append(setParts, fmt.Sprintf("title = $%d", idx))
 		args = append(args, val)
 		idx++
+		changes["title_changed"] = true
 	}
 
 	descToUpdate := req.Description
@@ -216,6 +224,7 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 			args = append(args, val)
 			idx++
 		}
+		changes["description_changed"] = true
 	}
 
 	if req.Comments != nil {
@@ -225,9 +234,9 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 		setParts = append(setParts, fmt.Sprintf("comments = $%d", idx))
 		args = append(args, *req.Comments)
 		idx++
+		changes["comments_changed"] = true
 	}
 
-	// Строгая валидация статуса
 	if req.Status != nil {
 		if *req.Status != models.TaskStatusTodo && *req.Status != models.TaskStatusInProgress && *req.Status != models.TaskStatusDone && *req.Status != models.TaskStatusPostponed && *req.Status != models.TaskStatusReview {
 			return nil, ErrInvalidTaskStatusValue
@@ -235,9 +244,10 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 		setParts = append(setParts, fmt.Sprintf("status = $%d", idx))
 		args = append(args, *req.Status)
 		idx++
+		changes["status_changed"] = true
+		changes["new_status"] = *req.Status
 	}
 
-	// Строгая валидация приоритета
 	if req.Priority != nil {
 		if *req.Priority != models.TaskPriorityLow && *req.Priority != models.TaskPriorityMedium && *req.Priority != models.TaskPriorityHigh {
 			return nil, ErrInvalidTaskPriority
@@ -245,6 +255,8 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 		setParts = append(setParts, fmt.Sprintf("priority = $%d", idx))
 		args = append(args, *req.Priority)
 		idx++
+		changes["priority_changed"] = true
+		changes["new_priority"] = *req.Priority
 	}
 
 	dueAtToUpdate := req.DueAt
@@ -253,10 +265,16 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 	}
 	if req.ClearDueAt {
 		setParts = append(setParts, "due_at = NULL")
+		changes["due_at_changed"] = true
 	} else if dueAtToUpdate != nil {
 		setParts = append(setParts, fmt.Sprintf("due_at = $%d", idx))
 		args = append(args, *dueAtToUpdate)
 		idx++
+		changes["due_at_changed"] = true
+	}
+
+	if req.AssigneeIDs != nil {
+		changes["assignees_changed"] = true
 	}
 
 	if len(setParts) == 0 && req.AssigneeIDs == nil {
@@ -301,6 +319,17 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 	assignees, _ := s.repo.GetAssigneesForTask(ctx, s.db, taskID)
 	updatedTask.AssigneeIDs = assignees
 
+	// Отправляем уведомление только если есть реальные изменения
+	if len(changes) > 0 {
+		s.bus.Publish(eventbus.SystemEvent{
+			Type:      models.EventTypeTaskUpdated,
+			ProjectID: projectID,
+			ActorID:   userID,
+			EntityID:  taskID,
+			Payload:   changes,
+		})
+	}
+
 	return updatedTask, nil
 }
 
@@ -344,6 +373,14 @@ func (s *TaskService) DeleteTask(ctx context.Context, userID, projectID, taskID 
 	} else if err != nil {
 		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
+
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeTaskDeleted,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  taskID,
+		Payload:   map[string]interface{}{"deleted": true},
+	})
 	return nil
 }
 

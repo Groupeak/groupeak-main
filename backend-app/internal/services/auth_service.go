@@ -19,10 +19,10 @@ import (
 )
 
 var (
-	ErrEmailAlreadyTaken = apperror.New(http.StatusConflict, "email already taken")
-	ErrInvalidPosition   = apperror.New(http.StatusBadRequest, "invalid position")
-	ErrMissingFields     = apperror.New(http.StatusBadRequest, "full_name, email and password are required")
-	ErrWeakPassword      = apperror.New(http.StatusBadRequest, "password must be at least 8 characters long")
+	ErrEmailAlreadyTaken      = apperror.New(http.StatusConflict, "email already taken")
+	ErrInvalidPosition        = apperror.New(http.StatusBadRequest, "invalid position")
+	ErrMissingFields          = apperror.New(http.StatusBadRequest, "full_name, email and password are required")
+	ErrWeakPassword           = apperror.New(http.StatusBadRequest, "password must be at least 8 characters long")
 	ErrUnsupportedEmailDomain = apperror.New(http.StatusBadRequest, "email domain is not supported")
 	ErrInvalidCredentials     = apperror.New(http.StatusUnauthorized, "invalid credentials")
 	ErrInvalidBirthDate       = apperror.New(http.StatusBadRequest, "invalid birth date, expected format dd.mm.yyyy")

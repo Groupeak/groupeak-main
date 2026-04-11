@@ -10,6 +10,7 @@ import (
 
 	"groupeak/internal/apperror"
 	"groupeak/internal/dto"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/models"
 	"groupeak/internal/repository"
 )
@@ -28,10 +29,11 @@ type EventService struct {
 	db     *sql.DB
 	repo   repository.EventRepository
 	logger *slog.Logger
+	bus    *eventbus.EventBus
 }
 
-func NewEventService(db *sql.DB, repo repository.EventRepository, logger *slog.Logger) *EventService {
-	return &EventService{db: db, repo: repo, logger: logger}
+func NewEventService(db *sql.DB, repo repository.EventRepository, logger *slog.Logger, bus *eventbus.EventBus) *EventService {
+	return &EventService{db: db, repo: repo, logger: logger, bus: bus}
 }
 
 // RunInTx оборачивает операции в транзакцию
@@ -115,6 +117,15 @@ func (s *EventService) CreateEvent(ctx context.Context, userID, projectID int, r
 		return nil, err
 	}
 
+	// Отправляем уведомление о создании митинга
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeEventCreated,
+		ProjectID: int64(projectID),
+		ActorID:   int64(userID),
+		EntityID:  int64(event.ID),
+		Payload:   map[string]interface{}{"title": event.Title, "start_at": event.StartAt},
+	})
+
 	return &dto.EventWithParticipants{
 		Event:        *event,
 		Participants: event.ParticipantIDs,
@@ -134,6 +145,7 @@ func (s *EventService) UpdateEvent(ctx context.Context, userID, projectID, event
 	setParts := make([]string, 0)
 	args := make([]interface{}, 0)
 	idx := 1
+	changes := make(map[string]interface{})
 
 	if req.Title != nil {
 		val := strings.TrimSpace(*req.Title)
@@ -143,30 +155,39 @@ func (s *EventService) UpdateEvent(ctx context.Context, userID, projectID, event
 		setParts = append(setParts, fmt.Sprintf("title = $%d", idx))
 		args = append(args, val)
 		idx++
+		changes["title_changed"] = true
 	}
 
 	if req.MeetingURL != nil {
 		setParts = append(setParts, fmt.Sprintf("meeting_url = $%d", idx))
 		args = append(args, *req.MeetingURL)
 		idx++
+		changes["meeting_url_changed"] = true
 	}
 
 	if req.Description != nil {
 		setParts = append(setParts, fmt.Sprintf("description = $%d", idx))
 		args = append(args, *req.Description)
 		idx++
+		changes["description_changed"] = true
 	}
 
 	if req.StartAt != nil {
 		setParts = append(setParts, fmt.Sprintf("start_at = $%d", idx))
 		args = append(args, *req.StartAt)
 		idx++
+		changes["start_at_changed"] = true
 	}
 
 	if req.EndAt != nil {
 		setParts = append(setParts, fmt.Sprintf("end_at = $%d", idx))
 		args = append(args, *req.EndAt)
 		idx++
+		changes["end_at_changed"] = true
+	}
+
+	if req.ParticipantIDs != nil {
+		changes["participants_changed"] = true
 	}
 
 	if len(setParts) == 0 && req.ParticipantIDs == nil {
@@ -204,6 +225,17 @@ func (s *EventService) UpdateEvent(ctx context.Context, userID, projectID, event
 	if err != nil {
 		s.logger.Error("failed to update event", slog.String("error", err.Error()))
 		return err
+	}
+
+	// Отправляем событие в шину, если были изменения
+	if len(changes) > 0 {
+		s.bus.Publish(eventbus.SystemEvent{
+			Type:      models.EventTypeEventUpdated,
+			ProjectID: int64(projectID),
+			ActorID:   int64(userID),
+			EntityID:  int64(eventID),
+			Payload:   changes,
+		})
 	}
 
 	s.logger.Info("event updated", slog.Int("event_id", eventID))
