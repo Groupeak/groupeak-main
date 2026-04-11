@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 
 	"groupeak/internal/config"
 	"groupeak/internal/db"
+	"groupeak/internal/eventbus"
 	"groupeak/internal/handlers"
 	"groupeak/internal/repository"
 	"groupeak/internal/router"
@@ -46,34 +48,49 @@ func main() {
 	// Инициализируем логгер
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 
-	// 4. Создаём ВСЕ репозитории первыми
+	// 4. Инициализируем Шину Событий (EventBus)
+	bus := eventbus.NewEventBus(logger)
+
+	// 5. Создаём ВСЕ репозитории первыми (добавили notifRepo)
 	taskRepo := repository.NewTaskRepository()
 	projectRepo := repository.NewProjectRepository()
 	userRepo := repository.NewUserRepository()
 	eventRepo := repository.NewEventRepository()
+	notifRepo := repository.NewNotificationRepository()
 
-	// 5. Создаём ВСЕ сервисы
+	// 6. Создаём ВСЕ сервисы
+	// Важно: прокидываем bus в те сервисы, которые генерируют события
 	authService := services.NewAuthService(sqlDB, userRepo, cfg.JWTToken, logger)
-	taskService := services.NewTaskService(sqlDB, taskRepo, logger)
-	projectService := services.NewProjectService(sqlDB, projectRepo, logger)
-	eventService := services.NewEventService(sqlDB, eventRepo, logger)
+	taskService := services.NewTaskService(sqlDB, taskRepo, logger, bus)
+	projectService := services.NewProjectService(sqlDB, projectRepo, logger, bus)
+	eventService := services.NewEventService(sqlDB, eventRepo, logger, bus)
 
-	// 6. Создаём HTTP-хендлеры
+	// Создаем сервис уведомлений (он будет слушать шину)
+	notifService := services.NewNotificationService(sqlDB, notifRepo, taskRepo, eventRepo, logger)
+
+	// 7. Запускаем фоновый воркер шины событий
+	bus.SetHandler(notifService.HandleEvent)
+	bus.Start(context.Background())
+	defer bus.Stop() // Гарантирует, что при выключении сервера все эвенты из очереди допишутся в БД
+
+	// 8. Создаём HTTP-хендлеры (добавили notificationHandler)
 	authHandler := handlers.NewAuthHandler(authService, minioClient, cfg.S3Bucket, cfg.S3Endpoint)
 	projectHandler := handlers.NewProjectHandler(projectService)
 	taskHandler := handlers.NewTaskHandler(taskService)
 	eventHandler := handlers.NewEventHandler(eventService)
+	notificationHandler := handlers.NewNotificationHandler(notifService)
 
-	// 7. Собираем роутер
+	// 9. Собираем роутер (прокинули notificationHandler)
 	r := router.NewRouter(
 		authHandler,
 		projectHandler,
 		taskHandler,
 		eventHandler,
+		notificationHandler,
 		[]byte(cfg.JWTToken),
 	)
 
-	// 8. Запускаем HTTP-сервер
+	// 10. Запускаем HTTP-сервер
 	addr := ":" + cfg.HTTPPort
 	log.Printf("starting HTTP server on %s\n", addr)
 

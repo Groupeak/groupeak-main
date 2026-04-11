@@ -11,9 +11,15 @@ import (
 	"github.com/go-chi/cors"
 )
 
-// NewRouter собирает HTTP-маршруты
-func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.ProjectHandler,
-	taskHandler *handlers.TaskHandler, eventHandler *handlers.EventHandler, jwtSecret []byte) http.Handler {
+// NewRouter собирает HTTP-маршруты. Добавили notificationHandler в параметры!
+func NewRouter(
+	authHandler *handlers.AuthHandler,
+	projectHandler *handlers.ProjectHandler,
+	taskHandler *handlers.TaskHandler,
+	eventHandler *handlers.EventHandler,
+	notificationHandler *handlers.NotificationHandler,
+	jwtSecret []byte,
+) http.Handler {
 	r := chi.NewRouter()
 
 	r.Use(chimw.RequestID)
@@ -38,6 +44,12 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 		r.Group(func(r chi.Router) {
 			r.Use(middleware.AuthMiddleware(jwtSecret))
 
+			r.Route("/notifications", func(r chi.Router) {
+				r.Get("/", notificationHandler.GetNotifications)           // GET /api/v1/notifications
+				r.Get("/unread-count", notificationHandler.GetUnreadCount) // GET /api/v1/notifications/unread-count
+				r.Patch("/read", notificationHandler.MarkRead)             // PATCH /api/v1/notifications/read
+			})
+
 			r.Route("/projects", func(r chi.Router) {
 				r.Post("/", projectHandler.CreateProject)                              // POST /api/v1/projects
 				r.Get("/", projectHandler.ListProjects)                                // GET  /api/v1/projects
@@ -53,7 +65,7 @@ func NewRouter(authHandler *handlers.AuthHandler, projectHandler *handlers.Proje
 				r.Get("/{projectID}/tasks", taskHandler.ListTasks)                        // GET  /api/v1/projects/{projectID}/tasks
 				r.Get("/{projectID}/tasks/{taskID}", taskHandler.GetTaskByID)             // GET  /api/v1/projects/{projectID}/tasks/{taskID}
 				r.Patch("/{projectID}/tasks/{taskID}", taskHandler.UpdateTask)            // PATCH /api/v1/projects/projectID/tasks/{taskID}
-				r.Delete("/{projectID}/tasks/{taskID}", taskHandler.DeleteTask)           // DELETE /api/v1/projects/{projectID}/tasks/{taskID}//
+				r.Delete("/{projectID}/tasks/{taskID}", taskHandler.DeleteTask)           // DELETE /api/v1/projects/{projectID}/tasks/{taskID}
 				r.Post("/{projectID}/tasks/{taskID}/submit", taskHandler.SubmitForReview) // POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
 				r.Post("/{projectID}/tasks/{taskID}/review", taskHandler.ReviewTask)      // POST /api/v1/projects/{projectID}/tasks/{taskID}/review
 
