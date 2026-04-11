@@ -1,7 +1,7 @@
 package apperror
 
 type AppError struct {
-	Code    int    
+	Code    int
 	Message string
 }
 
