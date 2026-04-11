@@ -4,44 +4,65 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
+import com.example.groupeak.ui.components.project.ProjectDescriptionDialog
+import com.example.groupeak.ui.components.project.ProjectFilterDialogHost
 import com.example.groupeak.ui.theme.OnestFontFamily
 
 private val HeaderBlue = Color(0xFF1876FF)
@@ -51,6 +72,7 @@ private val BorderGray = Color(0xFFB0B3C7)
 private val DotGray = Color(0xFFD9D9D9)
 private val DarkText = Color(0xFF333B46)
 private val ReviewGray = Color(0xFF969696)
+private val EmptyStateGray = Color(0xFF70717A)
 private val LowGreen = Color(0xFF26BC30)
 private val MediumYellow = Color(0xFFCDC036)
 private val HighRed = Color(0xFFFF0000)
@@ -70,6 +92,17 @@ fun ProjectScreen(
     onInviteMemberClick: () -> Unit = {},
     hasNotifications: Boolean = true,
 ) {
+    var showFilterDialog by remember { mutableStateOf(false) }
+    var showProjectDescriptionDialog by remember { mutableStateOf(false) }
+    var appliedSelectedMemberIds by remember { mutableStateOf(setOf<Long>()) }
+    var appliedSelectedPriorityName by remember { mutableStateOf<String?>(null) }
+
+    val appliedSelectedPriority =
+        appliedSelectedPriorityName?.let(ProjectTaskPriorityUi::valueOf)
+
+    val isFilterApplied =
+        appliedSelectedMemberIds.isNotEmpty() || appliedSelectedPriority != null
+
     GroupeakBackground {
         Box(
             modifier = Modifier.fillMaxSize(),
@@ -86,33 +119,22 @@ fun ProjectScreen(
                     hasNotifications = hasNotifications,
                 )
 
-                InfoButton(
-                    onClick = onInfoClick,
-                    modifier = Modifier.offset(x = 25.dp, y = 130.dp),
-                )
-
-                Text(
-                    text = uiState.title,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Light,
-                    fontSize = 30.sp,
-                    lineHeight = 38.sp,
-                    color = Color.Black,
-                    modifier = Modifier.offset(x = 48.dp, y = 121.dp),
-                )
-
-                SummaryRow(
+                ProjectTitleBlock(
+                    title = uiState.title,
                     deadlineText = uiState.deadlineText,
                     membersCount = uiState.membersCount,
                     tasksCount = uiState.tasksCount,
-                    modifier = Modifier.offset(x = 63.dp, y = 161.dp),
+                    onInfoClick = {
+                        showProjectDescriptionDialog = true
+                        onInfoClick()
+                    }
                 )
 
                 Box(
                     modifier = Modifier
                         .offset(x = 12.dp, y = 204.dp)
                         .width(388.dp)
-                        .height(if (uiState.selectedTab == ProjectTab.TASKS) 593.dp else 527.dp)
+                        .height(if (uiState.selectedTab == ProjectTab.TASKS) 600.dp else 527.dp)
                         .clip(RoundedCornerShape(18.dp))
                         .background(Color.White),
                 ) {
@@ -143,7 +165,10 @@ fun ProjectScreen(
                         ),
                         modifier = Modifier.offset(x = 340.dp, y = 11.dp),
                     ) {
-                        FilterButtonExact(onClick = onFilterClick)
+                        FilterButtonExact(
+                            onClick = { showFilterDialog = true },
+                            isActive = isFilterApplied,
+                        )
                     }
 
                     if (uiState.selectedTab == ProjectTab.TASKS) {
@@ -159,6 +184,28 @@ fun ProjectScreen(
                         )
                     }
                 }
+
+                ProjectFilterDialogHost(
+                    visible = showFilterDialog,
+                    members = uiState.members,
+                    initialSelectedMemberIds = appliedSelectedMemberIds,
+                    initialPriority = appliedSelectedPriority,
+                    onDismiss = { showFilterDialog = false },
+                    onApply = { memberIds, priority ->
+                        appliedSelectedMemberIds = memberIds
+                        appliedSelectedPriorityName = priority?.name
+                        showFilterDialog = false
+                        onFilterClick()
+                    }
+                )
+
+                ProjectDescriptionDialog(
+                    visible = showProjectDescriptionDialog,
+                    projectName = uiState.title,
+                    deadline = uiState.deadlineText,
+                    description = uiState.description,
+                    onDismiss = { showProjectDescriptionDialog = false },
+                )
             }
         }
     }
@@ -170,54 +217,62 @@ private fun ProjectTopBar(
     onNotificationsClick: () -> Unit,
     hasNotifications: Boolean,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 55.dp, bottom = 58.dp)
+    ) {
         Box(
             modifier = Modifier
-                .offset(x = 8.dp, y = 62.dp)
+                .align(Alignment.CenterStart)
+                .padding(start = 8.dp)
                 .size(28.dp)
                 .clickable { onBack() },
-            contentAlignment = Alignment.Center,
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_back_arrow),
                 contentDescription = "Назад",
-                tint = AccentBlue,
-                modifier = Modifier.size(28.dp),
+                tint = HeaderBlue,
+                modifier = Modifier.size(28.dp)
             )
         }
 
         Text(
             text = "Проект",
+            fontSize = 32.sp,
             fontFamily = OnestFontFamily,
             fontWeight = FontWeight.Normal,
-            fontSize = 32.sp,
-            lineHeight = 41.sp,
             color = HeaderBlue,
-            modifier = Modifier.offset(x = 150.dp, y = 55.dp),
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
         )
 
         Box(
             modifier = Modifier
-                .offset(x = 373.dp, y = 64.dp)
-                .size(20.dp)
+                .align(Alignment.CenterEnd)
+                .padding(end = 19.dp)
+                .size(28.dp)
                 .clickable { onNotificationsClick() },
-            contentAlignment = Alignment.Center,
+            contentAlignment = Alignment.Center
         ) {
             Icon(
                 painter = painterResource(id = R.drawable.ic_notif),
                 contentDescription = "Уведомления",
                 tint = HeaderBlue,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp)
             )
 
             if (hasNotifications) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 3.dp, y = (-1).dp)
+                        .offset(x = 1.dp, y = (-1).dp)
                         .size(7.dp)
                         .clip(CircleShape)
-                        .background(Color.Red),
+                        .background(Color.Red)
                 )
             }
         }
@@ -225,25 +280,73 @@ private fun ProjectTopBar(
 }
 
 @Composable
-private fun InfoButton(
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
+private fun ProjectTitleBlock(
+    title: String,
+    deadlineText: String,
+    membersCount: Int,
+    tasksCount: Int,
+    onInfoClick: () -> Unit,
 ) {
     Box(
-        modifier = modifier
-            .size(20.dp)
-            .clip(CircleShape)
-            .border(1.dp, AccentBlue, CircleShape)
-            .clickable { onClick() },
-        contentAlignment = Alignment.Center,
+        modifier = Modifier
+            .fillMaxWidth()
+            .offset(y = 121.dp)
     ) {
-        Text(
-            text = "i",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 12.sp,
-            color = AccentBlue,
-        )
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(38.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .widthIn(max = 360.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .clickable { onInfoClick() },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Image(
+                            painter = painterResource(id = R.drawable.ic_info),
+                            contentDescription = "Информация о проекте",
+                            modifier = Modifier.size(20.dp),
+                            contentScale = ContentScale.Fit,
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(3.dp))
+
+                    Text(
+                        text = title,
+                        fontFamily = OnestFontFamily,
+                        fontWeight = FontWeight.Light,
+                        fontSize = 30.sp,
+                        lineHeight = 38.sp,
+                        color = Color.Black,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.widthIn(max = 330.dp),
+                    )
+                }
+            }
+
+            SummaryRow(
+                deadlineText = deadlineText,
+                membersCount = membersCount,
+                tasksCount = tasksCount,
+                modifier = Modifier.padding(top = 2.dp),
+            )
+        }
     }
 }
 
@@ -254,53 +357,74 @@ private fun SummaryRow(
     tasksCount: Int,
     modifier: Modifier = Modifier,
 ) {
-    Row(
-        modifier = modifier,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = "Срок сдачи: $deadlineText",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Light,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            color = Color.Black,
-        )
-
-        SmallDot()
-
-        Text(
-            text = "$membersCount Участников",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            color = AccentBlue,
-        )
-
-        SmallDot()
-
-        Text(
-            text = "$tasksCount Задач",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 13.sp,
-            lineHeight = 17.sp,
-            color = AccentBlue,
-        )
-    }
-}
-
-@Composable
-private fun SmallDot() {
-    Spacer(modifier = Modifier.width(8.dp))
     Box(
-        modifier = Modifier
-            .size(4.dp)
-            .clip(CircleShape)
-            .background(DotGray),
-    )
-    Spacer(modifier = Modifier.width(8.dp))
+        modifier = modifier
+            .width(330.dp)
+            .height(17.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            Text(
+                text = buildAnnotatedString {
+                    append("Срок сдачи: ")
+                    withStyle(style = SpanStyle(color = AccentBlue)) {
+                        append(deadlineText)
+                    }
+                },
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Light,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                color = Color.Black,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(DotGray)
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Text(
+                text = "$membersCount Участников",
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                color = AccentBlue,
+                maxLines = 1
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Box(
+                modifier = Modifier
+                    .size(4.dp)
+                    .clip(CircleShape)
+                    .background(DotGray)
+            )
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            Text(
+                text = "$tasksCount Задач",
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Medium,
+                fontSize = 13.sp,
+                lineHeight = 17.sp,
+                color = AccentBlue,
+                maxLines = 1
+            )
+        }
+    }
 }
 
 @Composable
@@ -308,8 +432,14 @@ private fun AnimatedProjectTabsHeader(
     selectedTab: ProjectTab,
     onTabSelected: (ProjectTab) -> Unit,
 ) {
+    val isMembers = selectedTab == ProjectTab.MEMBERS
+
+    val containerWidth = if (isMembers) 367.dp else 327.dp
+    val startX = if (isMembers) 10.dp else 6.dp
+    val sliderWidth = if (isMembers) 184.dp else 164.dp
+
     val sliderOffset by animateDpAsState(
-        targetValue = if (selectedTab == ProjectTab.TASKS) 0.dp else 163.dp,
+        targetValue = if (selectedTab == ProjectTab.TASKS) 0.dp else if (isMembers) 183.dp else 163.dp,
         animationSpec = tween(
             durationMillis = ANIM_DURATION,
             easing = FastOutSlowInEasing
@@ -331,8 +461,8 @@ private fun AnimatedProjectTabsHeader(
 
     Box(
         modifier = Modifier
-            .offset(x = 6.dp, y = 11.dp)
-            .width(327.dp)
+            .offset(x = startX, y = 11.dp)
+            .width(containerWidth)
             .height(39.dp)
             .clip(RoundedCornerShape(18.dp))
             .border(1.dp, BorderGray, RoundedCornerShape(18.dp))
@@ -340,8 +470,8 @@ private fun AnimatedProjectTabsHeader(
     ) {
         Box(
             modifier = Modifier
-                .offset(x = sliderOffset, y = 0.dp)
-                .width(164.dp)
+                .offset(x = sliderOffset)
+                .width(sliderWidth)
                 .height(39.dp)
                 .clip(RoundedCornerShape(18.dp))
                 .background(SliderBlue),
@@ -349,8 +479,7 @@ private fun AnimatedProjectTabsHeader(
 
         Box(
             modifier = Modifier
-                .offset(x = 0.dp, y = 0.dp)
-                .width(164.dp)
+                .width(if (isMembers) 183.dp else 164.dp)
                 .height(39.dp)
                 .clickable { onTabSelected(ProjectTab.TASKS) },
             contentAlignment = Alignment.Center,
@@ -367,8 +496,8 @@ private fun AnimatedProjectTabsHeader(
 
         Box(
             modifier = Modifier
-                .offset(x = 163.dp, y = 0.dp)
-                .width(164.dp)
+                .offset(x = if (isMembers) 183.dp else 163.dp)
+                .width(sliderWidth)
                 .height(39.dp)
                 .clickable { onTabSelected(ProjectTab.MEMBERS) },
             contentAlignment = Alignment.Center,
@@ -388,19 +517,26 @@ private fun AnimatedProjectTabsHeader(
 @Composable
 private fun FilterButtonExact(
     onClick: () -> Unit,
+    isActive: Boolean,
 ) {
     Box(
         modifier = Modifier
             .width(42.dp)
             .height(39.dp)
             .clip(RoundedCornerShape(18.dp))
-            .border(1.dp, BorderGray, RoundedCornerShape(18.dp))
             .background(Color.White)
+            .border(
+                width = 1.dp,
+                color = BorderGray,
+                shape = RoundedCornerShape(18.dp)
+            )
             .clickable { onClick() },
         contentAlignment = Alignment.Center,
     ) {
         Image(
-            painter = painterResource(id = R.drawable.ic_filter),
+            painter = painterResource(
+                id = if (isActive) R.drawable.ic_filter_active else R.drawable.ic_filter
+            ),
             contentDescription = "Фильтр",
             modifier = Modifier.size(32.dp),
             contentScale = ContentScale.Fit,
@@ -413,7 +549,7 @@ private fun DividerExact(
     modifier: Modifier = Modifier,
 ) {
     HorizontalDivider(
-        modifier = modifier.width(284.dp),
+        modifier = modifier.fillMaxWidth(),
         thickness = 1.dp,
         color = BorderGray,
     )
@@ -424,118 +560,443 @@ private fun ExactTasksBody(
     uiState: ProjectUiState,
     onTaskClick: (Long) -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Текущие (${uiState.currentTasks.size})",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 18.sp,
-            lineHeight = 20.sp,
-            color = Color.Black,
-            modifier = Modifier.offset(x = 25.dp, y = 69.dp),
-        )
+    val scrollState = rememberScrollState()
 
-        Text(
-            text = "Все “Текущие”",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = AccentBlue,
-            modifier = Modifier.offset(x = 248.dp, y = 69.dp),
-        )
+    var showAllCurrent by remember(uiState.tasksMode) { mutableStateOf(false) }
+    var showAllReview by remember(uiState.tasksMode) { mutableStateOf(false) }
+    var showAllInactive by remember(uiState.tasksMode) { mutableStateOf(false) }
 
-        Icon(
-            painter = painterResource(id = R.drawable.ic_down_arrow),
-            contentDescription = "Все текущие",
-            tint = AccentBlue,
+    val allSectionsEmpty =
+        uiState.currentTasksCount == 0 &&
+                uiState.reviewTasksCount == 0 &&
+                uiState.inactiveTasksCount == 0
+
+    if (allSectionsEmpty) {
+        Box(
             modifier = Modifier
-                .offset(x = 343.dp, y = 68.dp)
-                .size(24.dp)
-                .rotate(-90f),
+                .fillMaxSize()
+                .padding(top = 69.dp, start = 25.dp, end = 20.dp, bottom = 20.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            EmptyStateText(
+                text = "Нет задач",
+                fontSize = 36.sp,
+            )
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 69.dp, start = 25.dp, end = 20.dp, bottom = 20.dp)
+            .verticalScroll(scrollState)
+    ) {
+        when (uiState.tasksMode) {
+            ProjectTasksMode.DEFAULT -> {
+                TaskSectionOrEmpty(
+                    title = "Текущие (${uiState.currentTasksCount})",
+                    actionText = if (uiState.currentTasksCount > 3) {
+                        if (showAllCurrent) "Свернуть" else "Все “Текущие”"
+                    } else null,
+                    isExpanded = showAllCurrent,
+                    onActionClick = if (uiState.currentTasksCount > 3) {
+                        { showAllCurrent = !showAllCurrent }
+                    } else null,
+                    tasks = uiState.currentTasks,
+                    muted = false,
+                    emptyText = "Нет текущих задач",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "На проверке (${uiState.reviewTasksCount})",
+                    actionText = if (uiState.reviewTasksCount > 3) {
+                        if (showAllReview) "Свернуть" else "Все “На проверке”"
+                    } else null,
+                    isExpanded = showAllReview,
+                    onActionClick = if (uiState.reviewTasksCount > 3) {
+                        { showAllReview = !showAllReview }
+                    } else null,
+                    tasks = uiState.reviewTasks,
+                    muted = true,
+                    emptyText = "Нет задач на проверке",
+                    onTaskClick = onTaskClick,
+                )
+            }
+
+            ProjectTasksMode.FILTERED_CURRENT -> {
+                TaskSectionOrEmpty(
+                    title = "Текущие (${uiState.currentTasksCount})",
+                    actionText = if (uiState.currentTasksCount > 3) {
+                        if (showAllCurrent) "Свернуть" else "Все “Текущие”"
+                    } else null,
+                    isExpanded = showAllCurrent,
+                    onActionClick = if (uiState.currentTasksCount > 3) {
+                        { showAllCurrent = !showAllCurrent }
+                    } else null,
+                    tasks = uiState.currentTasks,
+                    muted = false,
+                    emptyText = "Нет текущих задач",
+                    onTaskClick = onTaskClick,
+                )
+            }
+
+            ProjectTasksMode.REVIEW_INACTIVE -> {
+                TaskSectionOrEmpty(
+                    title = "На проверке (${uiState.reviewTasksCount})",
+                    actionText = if (uiState.reviewTasksCount > 3) {
+                        if (showAllReview) "Свернуть" else "Все “На проверке”"
+                    } else null,
+                    isExpanded = showAllReview,
+                    onActionClick = if (uiState.reviewTasksCount > 3) {
+                        { showAllReview = !showAllReview }
+                    } else null,
+                    tasks = uiState.reviewTasks,
+                    muted = true,
+                    emptyText = "Нет задач на проверке",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "Неактивные (${uiState.inactiveTasksCount})",
+                    actionText = if (uiState.inactiveTasksCount > 3) {
+                        if (showAllInactive) "Свернуть" else "Все “Неактивные”"
+                    } else null,
+                    isExpanded = showAllInactive,
+                    onActionClick = if (uiState.inactiveTasksCount > 3) {
+                        { showAllInactive = !showAllInactive }
+                    } else null,
+                    tasks = uiState.inactiveTasks,
+                    muted = true,
+                    emptyText = "Нет неактивных задач",
+                    onTaskClick = onTaskClick,
+                )
+            }
+
+            ProjectTasksMode.NO_REVIEW_INACTIVE -> {
+                TaskSectionOrEmpty(
+                    title = "На проверке (${uiState.reviewTasksCount})",
+                    tasks = emptyList(),
+                    muted = true,
+                    emptyText = "Нет задач на проверке",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "Неактивные (${uiState.inactiveTasksCount})",
+                    actionText = if (uiState.inactiveTasksCount > 3) {
+                        if (showAllInactive) "Свернуть" else "Все “Неактивные”"
+                    } else null,
+                    isExpanded = showAllInactive,
+                    onActionClick = if (uiState.inactiveTasksCount > 3) {
+                        { showAllInactive = !showAllInactive }
+                    } else null,
+                    tasks = uiState.inactiveTasks,
+                    muted = true,
+                    emptyText = "Нет неактивных задач",
+                    onTaskClick = onTaskClick,
+                )
+            }
+
+            ProjectTasksMode.NO_CURRENT -> {
+                TaskSectionOrEmpty(
+                    title = "Текущие (${uiState.currentTasksCount})",
+                    tasks = emptyList(),
+                    muted = false,
+                    emptyText = "Нет текущих задач",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "На проверке (${uiState.reviewTasksCount})",
+                    actionText = if (uiState.reviewTasksCount > 3) {
+                        if (showAllReview) "Свернуть" else "Все “На проверке”"
+                    } else null,
+                    isExpanded = showAllReview,
+                    onActionClick = if (uiState.reviewTasksCount > 3) {
+                        { showAllReview = !showAllReview }
+                    } else null,
+                    tasks = uiState.reviewTasks,
+                    muted = true,
+                    emptyText = "Нет задач на проверке",
+                    onTaskClick = onTaskClick,
+                )
+            }
+
+            ProjectTasksMode.EMPTY -> {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(430.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    EmptyStateText(
+                        text = "Нет задач",
+                        fontSize = 36.sp,
+                    )
+                }
+            }
+
+            ProjectTasksMode.ALL_THREE -> {
+                TaskSectionOrEmpty(
+                    title = "Текущие (${uiState.currentTasksCount})",
+                    actionText = if (uiState.currentTasksCount > 3) {
+                        if (showAllCurrent) "Свернуть" else "Все “Текущие”"
+                    } else null,
+                    isExpanded = showAllCurrent,
+                    onActionClick = if (uiState.currentTasksCount > 3) {
+                        { showAllCurrent = !showAllCurrent }
+                    } else null,
+                    tasks = uiState.currentTasks,
+                    muted = false,
+                    emptyText = "Нет текущих задач",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "На проверке (${uiState.reviewTasksCount})",
+                    actionText = if (uiState.reviewTasksCount > 3) {
+                        if (showAllReview) "Свернуть" else "Все “На проверке”"
+                    } else null,
+                    isExpanded = showAllReview,
+                    onActionClick = if (uiState.reviewTasksCount > 3) {
+                        { showAllReview = !showAllReview }
+                    } else null,
+                    tasks = uiState.reviewTasks,
+                    muted = true,
+                    emptyText = "Нет задач на проверке",
+                    onTaskClick = onTaskClick,
+                )
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                TaskSectionOrEmpty(
+                    title = "Неактивные (${uiState.inactiveTasksCount})",
+                    actionText = if (uiState.inactiveTasksCount > 3) {
+                        if (showAllInactive) "Свернуть" else "Все “Неактивные”"
+                    } else null,
+                    isExpanded = showAllInactive,
+                    onActionClick = if (uiState.inactiveTasksCount > 3) {
+                        { showAllInactive = !showAllInactive }
+                    } else null,
+                    tasks = uiState.inactiveTasks,
+                    muted = true,
+                    emptyText = "Нет неактивных задач",
+                    onTaskClick = onTaskClick,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TaskSectionOrEmpty(
+    title: String,
+    tasks: List<ProjectTaskItemUi>,
+    muted: Boolean,
+    emptyText: String,
+    onTaskClick: (Long) -> Unit,
+    actionText: String? = null,
+    isExpanded: Boolean = false,
+    onActionClick: (() -> Unit)? = null,
+    emptyFontSize: TextUnit = 24.sp,
+    emptySectionHeight: Dp = 220.dp,
+) {
+    TasksSectionHeader(
+        title = title,
+        actionText = actionText,
+        isExpanded = isExpanded,
+        onActionClick = onActionClick,
+    )
+
+    Spacer(modifier = Modifier.height(14.dp))
+
+    if (tasks.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(emptySectionHeight),
+            contentAlignment = Alignment.Center,
+        ) {
+            EmptyStateText(
+                text = emptyText,
+                fontSize = emptyFontSize,
+            )
+        }
+    } else {
+        AnimatedTaskRows(
+            tasks = tasks,
+            muted = muted,
+            expanded = isExpanded,
+            onTaskClick = onTaskClick,
+            limit = 3,
         )
+    }
+}
 
-        val current = uiState.currentTasks.take(3)
-        val review = uiState.reviewTasks.take(3)
+@Composable
+private fun TasksSectionHeader(
+    title: String,
+    actionText: String? = null,
+    isExpanded: Boolean = false,
+    onActionClick: (() -> Unit)? = null,
+) {
+    val arrowRotation by animateFloatAsState(
+        targetValue = if (isExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 220, easing = FastOutSlowInEasing),
+        label = "project_section_arrow_rotation"
+    )
 
-        if (current.isNotEmpty()) {
-            ExactTaskRow(
-                task = current[0],
-                muted = false,
-                width = 202.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 103.dp),
-                onClick = { onTaskClick(current[0].id) },
-            )
-        }
-
-        DividerExact(modifier = Modifier.offset(x = 50.dp, y = 160.dp))
-
-        if (current.size > 1) {
-            ExactTaskRow(
-                task = current[1],
-                muted = false,
-                width = 275.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 177.dp),
-                onClick = { onTaskClick(current[1].id) },
-            )
-        }
-
-        DividerExact(modifier = Modifier.offset(x = 50.dp, y = 234.dp))
-
-        if (current.size > 2) {
-            ExactTaskRow(
-                task = current[2],
-                muted = false,
-                width = 291.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 251.dp),
-                onClick = { onTaskClick(current[2].id) },
-            )
-        }
-
-        DividerExact(modifier = Modifier.offset(x = 50.dp, y = 308.dp))
-
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Text(
-            text = "На проверке (${uiState.reviewTasks.size})",
+            text = title,
             fontFamily = OnestFontFamily,
             fontWeight = FontWeight.Normal,
             fontSize = 18.sp,
             lineHeight = 20.sp,
             color = Color.Black,
-            modifier = Modifier.offset(x = 25.dp, y = 325.dp),
         )
 
-        if (review.isNotEmpty()) {
-            ExactTaskRow(
-                task = review[0],
-                muted = true,
-                width = 265.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 359.dp),
-                onClick = { onTaskClick(review[0].id) },
+        Spacer(modifier = Modifier.weight(1f))
+
+        if (actionText != null && onActionClick != null) {
+            Row(
+                modifier = Modifier.clickable { onActionClick() },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = actionText,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = AccentBlue,
+                )
+
+                Icon(
+                    painter = painterResource(id = R.drawable.ic_down_arrow),
+                    contentDescription = actionText,
+                    tint = AccentBlue,
+                    modifier = Modifier
+                        .padding(start = 2.dp)
+                        .size(24.dp)
+                        .rotate(arrowRotation),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun EmptyStateText(
+    text: String,
+    fontSize: TextUnit,
+) {
+    Text(
+        text = text,
+        fontFamily = OnestFontFamily,
+        fontWeight = FontWeight.Medium,
+        fontSize = fontSize,
+        lineHeight = if (fontSize == 36.sp) 40.sp else 28.sp,
+        color = EmptyStateGray,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
+}
+
+enum class ProjectTaskVisualType {
+    NONE,
+    DONE,
+    ALARM_OFF
+}
+
+private fun ProjectTaskVisualType.toDrawableRes(): Int? {
+    return when (this) {
+        ProjectTaskVisualType.NONE -> null
+        ProjectTaskVisualType.DONE -> R.drawable.ic_task_completed
+        ProjectTaskVisualType.ALARM_OFF -> R.drawable.ic_alarm_off
+    }
+}
+
+@Composable
+private fun AnimatedTaskRows(
+    tasks: List<ProjectTaskItemUi>,
+    muted: Boolean,
+    expanded: Boolean,
+    onTaskClick: (Long) -> Unit,
+    limit: Int = 3,
+) {
+    val initialTasks = tasks.take(limit)
+    val extraTasks = if (tasks.size > limit) tasks.drop(limit) else emptyList()
+
+    DrawTaskRows(
+        tasks = initialTasks,
+        muted = muted,
+        onTaskClick = onTaskClick,
+    )
+
+    AnimatedVisibility(
+        visible = expanded && extraTasks.isNotEmpty(),
+        enter = expandVertically(
+            animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+            expandFrom = Alignment.Top
+        ) + fadeIn(
+            animationSpec = tween(durationMillis = 220)
+        ),
+        exit = shrinkVertically(
+            animationSpec = tween(durationMillis = 240, easing = FastOutSlowInEasing),
+            shrinkTowards = Alignment.Top
+        ) + fadeOut(
+            animationSpec = tween(durationMillis = 180)
+        )
+    ) {
+        Column {
+            if (initialTasks.isNotEmpty() && extraTasks.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(17.dp))
+            }
+
+            DrawTaskRows(
+                tasks = extraTasks,
+                muted = muted,
+                onTaskClick = onTaskClick,
             )
         }
+    }
+}
+@Composable
+private fun DrawTaskRows(
+    tasks: List<ProjectTaskItemUi>,
+    muted: Boolean,
+    onTaskClick: (Long) -> Unit,
+) {
+    tasks.forEachIndexed { index, task ->
+        ExactTaskRow(
+            task = task,
+            muted = muted,
+            onClick = { onTaskClick(task.id) },
+            trailingIconRes = task.visualType.toDrawableRes(),
+        )
 
-        DividerExact(modifier = Modifier.offset(x = 50.dp, y = 416.dp))
+        Spacer(modifier = Modifier.height(17.dp))
 
-        if (review.size > 1) {
-            ExactTaskRow(
-                task = review[1],
-                muted = true,
-                width = 291.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 433.dp),
-                onClick = { onTaskClick(review[1].id) },
-            )
-        }
+        DividerExact(modifier = Modifier.padding(start = 25.dp))
 
-        DividerExact(modifier = Modifier.offset(x = 50.dp, y = 490.dp))
-
-        if (review.size > 2) {
-            ExactTaskRow(
-                task = review[2],
-                muted = true,
-                width = 275.dp,
-                modifier = Modifier.offset(x = 32.dp, y = 507.dp),
-                onClick = { onTaskClick(review[2].id) },
-            )
+        if (index != tasks.lastIndex) {
+            Spacer(modifier = Modifier.height(17.dp))
         }
     }
 }
@@ -544,9 +1005,8 @@ private fun ExactTasksBody(
 private fun ExactTaskRow(
     task: ProjectTaskItemUi,
     muted: Boolean,
-    width: Dp,
-    modifier: Modifier = Modifier,
     onClick: () -> Unit,
+    trailingIconRes: Int? = null,
 ) {
     val titleColor = if (muted) ReviewGray else Color.Black
     val metaColor = if (muted) ReviewGray else Color.Black
@@ -558,62 +1018,76 @@ private fun ExactTaskRow(
         else -> LowGreen
     }
 
-    Box(
-        modifier = modifier
-            .width(width)
-            .height(40.dp)
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .clickable { onClick() },
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(
-            text = task.title,
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 15.sp,
-            lineHeight = 20.sp,
-            color = titleColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.offset(x = 0.dp, y = 0.dp),
-        )
+        Column(
+            modifier = Modifier.weight(1f)
+        ) {
+            Text(
+                text = task.title,
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = 15.sp,
+                lineHeight = 20.sp,
+                color = titleColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
 
-        Text(
-            text = task.priority.title,
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = priorityColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.offset(x = 0.dp, y = 20.dp),
-        )
+            Spacer(modifier = Modifier.height(2.dp))
 
-        val deadlineStart = when (task.deadline) {
-            "22.02.26" -> 150.dp
-            "25.02.26" -> 150.dp
-            "28.02.26" -> 140.dp
-            "08.03.26" -> 140.dp
-            "15.03.26" -> 140.dp
-            else -> 140.dp
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = task.priority.title,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = priorityColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Box(
+                    modifier = Modifier
+                        .size(4.dp)
+                        .clip(CircleShape)
+                        .background(dotColor),
+                )
+
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Text(
+                    text = task.deadline,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Medium,
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    color = metaColor,
+                )
+            }
         }
 
-        Box(
-            modifier = Modifier
-                .offset(x = deadlineStart - 8.dp, y = 28.dp)
-                .size(4.dp)
-                .clip(CircleShape)
-                .background(dotColor),
-        )
+        if (trailingIconRes != null) {
+            Spacer(modifier = Modifier.width(10.dp))
 
-        Text(
-            text = task.deadline,
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Medium,
-            fontSize = 14.sp,
-            lineHeight = 20.sp,
-            color = metaColor,
-            modifier = Modifier.offset(x = deadlineStart, y = 20.dp),
-        )
+            val iconSize = if (trailingIconRes == R.drawable.ic_alarm_off) 30.dp else 32.dp
+
+            Image(
+                painter = painterResource(id = trailingIconRes),
+                contentDescription = null,
+                modifier = Modifier.size(iconSize),
+                contentScale = ContentScale.Fit,
+            )
+        }
     }
 }
 
@@ -623,88 +1097,61 @@ private fun MembersBodySimple(
     onMemberClick: (Long) -> Unit,
     onInviteMemberClick: () -> Unit,
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Text(
-            text = "Участник",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 20.sp,
-            lineHeight = 24.sp,
-            color = AccentBlue,
-            modifier = Modifier.offset(x = 40.dp, y = 69.dp),
-        )
+    val scrollState = rememberScrollState()
+    val members = uiState.members
 
-        Text(
-            text = "Должность",
-            fontFamily = OnestFontFamily,
-            fontWeight = FontWeight.Normal,
-            fontSize = 20.sp,
-            lineHeight = 24.sp,
-            color = AccentBlue,
-            modifier = Modifier.offset(x = 240.dp, y = 69.dp),
-        )
-
-        val topPositions = listOf(134.dp, 205.dp, 276.dp, 347.dp, 418.dp)
-        val dividerPositions = listOf(182.dp, 253.dp, 324.dp, 395.dp, 466.dp)
-
-        uiState.members.take(5).forEachIndexed { index, member ->
-            Row(
-                modifier = Modifier
-                    .offset(x = 30.dp, y = topPositions[index])
-                    .width(320.dp)
-                    .height(25.dp)
-                    .clickable { onMemberClick(member.id) },
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Text(
-                    text = member.fullName,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp,
-                    color = DarkText,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.width(165.dp),
-                )
-
-                if (member.isOwner) {
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Image(
-                        painter = painterResource(id = R.drawable.crown),
-                        contentDescription = "Владелец",
-                        modifier = Modifier.size(20.dp),
-                        contentScale = ContentScale.Fit,
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(16.dp))
-
-                Text(
-                    text = member.position,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    fontSize = 20.sp,
-                    lineHeight = 24.sp,
-                    color = Color(0xFF70717A),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            HorizontalDivider(
-                modifier = Modifier
-                    .offset(x = 51.dp, y = dividerPositions[index])
-                    .width(289.dp),
-                thickness = 1.dp,
-                color = BorderGray,
+    if (members.isEmpty()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(top = 69.dp, bottom = 20.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            EmptyStateText(
+                text = "Нет участников",
+                fontSize = 36.sp,
             )
+        }
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(top = 69.dp, bottom = 20.dp)
+            .verticalScroll(scrollState)
+    ) {
+        MembersHeaderExact()
+
+        Spacer(modifier = Modifier.height(34.dp))
+
+        members.forEachIndexed { index, member ->
+            MemberRowExact(
+                member = member,
+                onClick = { onMemberClick(member.id) }
+            )
+
+            Spacer(modifier = Modifier.height(22.dp))
+
+            if (index != members.lastIndex) {
+                HorizontalDivider(
+                    modifier = Modifier
+                        .padding(start = 51.dp)
+                        .width(289.dp),
+                    thickness = 1.dp,
+                    color = BorderGray,
+                )
+
+                Spacer(modifier = Modifier.height(22.dp))
+            }
         }
 
         if (uiState.isOwner) {
+            Spacer(modifier = Modifier.height(18.dp))
+
             Row(
                 modifier = Modifier
-                    .offset(x = 69.dp, y = 489.dp)
+                    .padding(start = 69.dp)
                     .clickable { onInviteMemberClick() },
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -727,5 +1174,114 @@ private fun MembersBodySimple(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun MembersHeaderExact() {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(25.dp)
+    ) {
+        Text(
+            text = "Участник",
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 20.sp,
+            lineHeight = 24.sp,
+            color = HeaderBlue,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.offset(x = 40.dp)
+        )
+
+        Text(
+            text = "Должность",
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 20.sp,
+            lineHeight = 24.sp,
+            color = HeaderBlue,
+            textAlign = TextAlign.Start,
+            modifier = Modifier.offset(x = 240.dp)
+        )
+    }
+}
+
+@Composable
+private fun MemberRowExact(
+    member: ProjectMemberItemUi,
+    onClick: () -> Unit,
+) {
+    val memberColumnCenterX = 90.dp
+    val positionColumnCenterX = 295.dp
+
+    val memberColumnWidth = 170.dp
+    val positionColumnWidth = 120.dp
+
+    val density = LocalDensity.current
+    var textWidthPx by remember(member.fullName) { mutableStateOf(0) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(26.dp)
+            .clickable { onClick() }
+    ) {
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = memberColumnCenterX - memberColumnWidth / 2)
+                .width(memberColumnWidth)
+                .height(26.dp)
+        ) {
+            Text(
+                text = member.fullName,
+                fontFamily = OnestFontFamily,
+                fontWeight = FontWeight.Normal,
+                fontSize = 20.sp,
+                lineHeight = 24.sp,
+                color = DarkText,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                onTextLayout = { textLayoutResult ->
+                    textWidthPx = textLayoutResult.size.width
+                },
+                modifier = Modifier
+                    .align(Alignment.Center)
+                    .widthIn(max = 140.dp)
+            )
+
+            if (member.isOwner) {
+                val crownOffset = with(density) { (textWidthPx / 2f).toDp() + 18.dp }
+
+                Image(
+                    painter = painterResource(id = R.drawable.crown),
+                    contentDescription = "Владелец",
+                    modifier = Modifier
+                        .align(Alignment.Center)
+                        .offset(x = crownOffset)
+                        .size(24.dp),
+                    contentScale = ContentScale.Fit
+                )
+            }
+        }
+
+        Text(
+            text = member.position,
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            fontSize = 20.sp,
+            lineHeight = 24.sp,
+            color = EmptyStateGray,
+            textAlign = TextAlign.Center,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .offset(x = positionColumnCenterX - positionColumnWidth / 2)
+                .width(positionColumnWidth)
+        )
     }
 }
