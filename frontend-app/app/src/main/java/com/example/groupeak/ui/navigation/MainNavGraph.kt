@@ -42,6 +42,8 @@ import com.example.groupeak.ui.screens.project.mockProjectUiState
 import com.example.groupeak.ui.screens.tasks.TasksScreen
 import com.example.groupeak.ui.screens.tasks.TasksViewModel
 import com.example.groupeak.ui.screens.tasks.TasksViewModelFactory
+import com.example.groupeak.ui.screens.events.EventsScreen
+import com.example.groupeak.ui.screens.events.EventsViewModel
 
 @Composable
 fun MainNavGraph(
@@ -396,6 +398,20 @@ fun MainNavGraph(
         composable(Screen.Notifications.route) {
             NotificationsScreen(
                 onBack = { navController.popBackStack() },
+            )
+        }
+
+        // Экран мероприятий
+        composable(Screen.Events.route) {
+            val vm: EventsViewModel = viewModel()
+            val uiState by vm.uiState.collectAsState()
+
+            EventsScreen(
+                uiState = uiState,
+                onBackClick = { navController.popBackStack() },
+                onEventClick = { event -> vm.selectEvent(event) },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                onDismissDialog = { vm.clearSelection() }
             )
         }
     }

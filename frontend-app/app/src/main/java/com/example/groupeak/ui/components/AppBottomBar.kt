@@ -39,6 +39,7 @@ fun AppBottomBar(
         BottomItem(Screen.Home.route, "Главная", R.drawable.ic_home_button),
         BottomItem(Screen.Tasks.route, "Задачи", R.drawable.ic_tasks_button),
         BottomItem(null, "Добавить", R.drawable.ic_add_button),
+        BottomItem(Screen.Events.route, "Мероприятия", R.drawable.ic_events),
         BottomItem(Screen.Account.route, "Аккаунт", R.drawable.ic_user_button),
     )
 
@@ -55,7 +56,7 @@ fun AppBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 9.dp),
-            horizontalArrangement = Arrangement.spacedBy(73.dp, Alignment.CenterHorizontally),
+            horizontalArrangement = Arrangement.spacedBy(45.dp, Alignment.CenterHorizontally),
             verticalAlignment = Alignment.Top
         ) {
             items.forEach { item ->
