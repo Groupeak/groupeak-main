@@ -103,15 +103,21 @@ private fun TopBar(
     Box(
         modifier = Modifier
             .fillMaxWidth()
-            .height(100.dp)
+            .padding(top = 55.dp, bottom = 58.dp)
     ) {
-        ProfileAvatar(
-            avatarUrl = avatarUrl,
+        Box(
             modifier = Modifier
-                .offset(x = 11.dp, y = 56.dp)
+                .align(Alignment.CenterStart)
+                .padding(start = 11.dp)
                 .size(40.dp)
-                .clickable { onProfileClick() }
-        )
+                .clickable { onProfileClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            ProfileAvatar(
+                avatarUrl = avatarUrl,
+                modifier = Modifier.size(40.dp)
+            )
+        }
 
         Text(
             text = "Главная",
@@ -122,14 +128,15 @@ private fun TopBar(
             color = BluePrimary300,
             textAlign = TextAlign.Center,
             modifier = Modifier
-                .align(Alignment.TopCenter)
-                .offset(y = 55.dp)
+                .align(Alignment.Center)
+                .fillMaxWidth()
         )
 
         Box(
             modifier = Modifier
-                .offset(x = 373.dp, y = 64.dp)
-                .size(20.dp)
+                .align(Alignment.CenterEnd)
+                .padding(end = 19.dp)
+                .size(28.dp)
                 .clickable { onNotificationsClick() },
             contentAlignment = Alignment.Center
         ) {
@@ -137,14 +144,14 @@ private fun TopBar(
                 painter = painterResource(id = R.drawable.ic_notif),
                 contentDescription = "Уведомления",
                 tint = BluePrimary300,
-                modifier = Modifier.size(20.dp)
+                modifier = Modifier.size(22.dp)
             )
 
             if (hasNotifications) {
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopEnd)
-                        .offset(x = 4.dp, y = (-1).dp)
+                        .offset(x = 1.dp, y = (-1).dp)
                         .size(7.dp)
                         .clip(CircleShape)
                         .background(Color.Red)
