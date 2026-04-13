@@ -251,6 +251,12 @@ func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, event
 	if !authorized {
 		return ErrNotEventCreator
 	}
+	
+	partsMap, err := s.repo.GetParticipantsForEvents(ctx, s.db, []int{eventID})
+	var targetUserIDs []int
+	if err == nil {
+		targetUserIDs = partsMap[eventID]
+	}
 
 	err = s.repo.DeleteEvent(ctx, s.db, eventID)
 	if err == sql.ErrNoRows {
@@ -259,6 +265,18 @@ func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, event
 		s.logger.Error("failed to delete event", slog.String("error", err.Error()))
 		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
+
+	// Отправляем ивент с участниками в пейлоаде
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeEventDeleted,
+		ProjectID: int64(projectID),
+		ActorID:   int64(userID),
+		EntityID:  int64(eventID),
+		Payload: map[string]interface{}{
+			"deleted":         true,
+			"target_user_ids": targetUserIDs,
+		},
+	})
 
 	s.logger.Info("event deleted", slog.Int("event_id", eventID))
 	return nil
