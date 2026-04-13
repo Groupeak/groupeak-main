@@ -150,6 +150,26 @@ func (s *ProjectService) UpdateProject(ctx context.Context, userID, projectID in
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
+	members, errMembers := s.repo.ListProjectMembers(ctx, s.db, projectID)
+	var targetUserIDs []int64
+	if errMembers == nil {
+		for _, m := range members {
+			targetUserIDs = append(targetUserIDs, m.UserID)
+		}
+	}
+
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeProjectUpdated,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  projectID,
+		Payload: map[string]interface{}{
+			"name_changed":        nameToUpdate != nil,
+			"deadline_at_changed": req.DeadlineAt != nil || req.ClearDeadlineAt,
+			"target_user_ids":     targetUserIDs,
+		},
+	})
+
 	return updatedProj, nil
 }
 
@@ -164,10 +184,36 @@ func (s *ProjectService) DeleteProject(ctx context.Context, userID, projectID in
 		return ErrNotProjectOwner
 	}
 
+	members, errMembers := s.repo.ListProjectMembers(ctx, s.db, projectID)
+	var targetUserIDs []int64
+	if errMembers == nil {
+		for _, m := range members {
+			targetUserIDs = append(targetUserIDs, m.UserID)
+		}
+	}
+
+	projectDetails, _ := s.repo.GetProjectDetails(ctx, s.db, projectID)
+	projName := "Удаленный проект"
+	if projectDetails != nil {
+		projName = projectDetails.Project.Name
+	}
+
 	if err := s.repo.DeleteProject(ctx, s.db, projectID); err != nil {
 		s.logger.Error("failed to delete project", slog.String("error", err.Error()))
 		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
+
+	s.bus.Publish(eventbus.SystemEvent{
+		Type:      models.EventTypeProjectDeleted,
+		ProjectID: projectID,
+		ActorID:   userID,
+		EntityID:  projectID,
+		Payload: map[string]interface{}{
+			"project_name":    projName,
+			"target_user_ids": targetUserIDs,
+			"deleted":         true,
+		},
+	})
 
 	s.logger.Info("project deleted", slog.Int64("project_id", projectID))
 	return nil
@@ -257,11 +303,10 @@ func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectI
 		return apperror.New(http.StatusInternalServerError, "internal server error")
 	}
 
-	// Отправляем событие о том, что пользователя удалили из проекта
 	s.bus.Publish(eventbus.SystemEvent{
 		Type:      models.EventTypeProjectKicked,
 		ProjectID: projectID,
-		ActorID:   requesterID, // Тот, кто удалил (Owner или сам юзер)
+		ActorID:   requesterID, 
 		EntityID:  targetUserID,
 		Payload: map[string]interface{}{
 			"target_user_id": targetUserID,
