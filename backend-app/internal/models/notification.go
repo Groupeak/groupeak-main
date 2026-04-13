@@ -8,14 +8,20 @@ import (
 type EventType string
 
 const (
-	EventTypeTaskCreated   EventType = "task_created"
-	EventTypeTaskUpdated   EventType = "task_updated"
-	EventTypeTaskDeleted   EventType = "task_deleted"
-	EventTypeTaskReviewed  EventType = "task_reviewed"
-	EventTypeProjectMember EventType = "project_member_added"
-	EventTypeProjectKicked EventType = "project_member_removed"
-	EventTypeEventCreated  EventType = "event_created"
-	EventTypeEventUpdated  EventType = "event_updated"
+	EventTypeTaskCreated    EventType = "task_created"
+	EventTypeTaskUpdated    EventType = "task_updated"
+	EventTypeTaskDeleted    EventType = "task_deleted"
+	EventTypeTaskReviewed   EventType = "task_reviewed"
+	EventTypeProjectMember  EventType = "project_member_added"
+	EventTypeProjectKicked  EventType = "project_member_removed"
+	EventTypeEventCreated   EventType = "event_created"
+	EventTypeEventUpdated   EventType = "event_updated"
+	EventTypeEventDeleted   EventType = "event_deleted"
+	EventTypeProjectUpdated EventType = "project_updated"
+	EventTypeProjectDeleted EventType = "project_deleted"
+	EventTypeTaskUnassigned EventType = "task_unassigned"
+	EventTypeTaskDeadline   EventType = "task_deadline"
+	EventTypeEventReminder  EventType = "event_reminder"
 )
 
 type Notification struct {
