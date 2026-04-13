@@ -185,10 +185,12 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 		return nil, ErrTaskNotFound
 	}
 
+	oldAssignees, _ := s.repo.GetAssigneesForTask(ctx, s.db, taskID)
+
 	setParts := make([]string, 0)
 	args := make([]interface{}, 0)
 	idx := 1
-	changes := make(map[string]interface{}) // Собираем изменения для уведомления
+	changes := make(map[string]interface{})
 
 	titleToUpdate := req.Title
 	if titleToUpdate == nil && req.TaskName != nil {
@@ -319,7 +321,27 @@ func (s *TaskService) UpdateTask(ctx context.Context, userID, projectID, taskID 
 	assignees, _ := s.repo.GetAssigneesForTask(ctx, s.db, taskID)
 	updatedTask.AssigneeIDs = assignees
 
-	// Отправляем уведомление только если есть реальные изменения
+	if req.AssigneeIDs != nil {
+		newAssigneesMap := make(map[int64]bool)
+		for _, aid := range *req.AssigneeIDs {
+			newAssigneesMap[aid] = true
+		}
+
+		for _, oldID := range oldAssignees {
+			if !newAssigneesMap[oldID] {
+				s.bus.Publish(eventbus.SystemEvent{
+					Type:      models.EventTypeTaskUnassigned,
+					ProjectID: projectID,
+					ActorID:   userID,
+					EntityID:  taskID,
+					Payload: map[string]interface{}{
+						"target_user_id": oldID,
+					},
+				})
+			}
+		}
+	}
+
 	if len(changes) > 0 {
 		s.bus.Publish(eventbus.SystemEvent{
 			Type:      models.EventTypeTaskUpdated,
@@ -367,6 +389,8 @@ func (s *TaskService) DeleteTask(ctx context.Context, userID, projectID, taskID 
 		return ErrForbidden
 	}
 
+	assignees, _ := s.repo.GetAssigneesForTask(ctx, s.db, taskID)
+
 	err = s.repo.DeleteTask(ctx, s.db, taskID)
 	if err == sql.ErrNoRows {
 		return ErrTaskNotFound
@@ -379,7 +403,10 @@ func (s *TaskService) DeleteTask(ctx context.Context, userID, projectID, taskID 
 		ProjectID: projectID,
 		ActorID:   userID,
 		EntityID:  taskID,
-		Payload:   map[string]interface{}{"deleted": true},
+		Payload: map[string]interface{}{
+			"deleted":         true,
+			"target_user_ids": assignees,
+		},
 	})
 	return nil
 }
