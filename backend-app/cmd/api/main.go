@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"groupeak/internal/config"
 	"groupeak/internal/db"
@@ -14,6 +17,7 @@ import (
 	"groupeak/internal/repository"
 	"groupeak/internal/router"
 	"groupeak/internal/services"
+	workers "groupeak/internal/worker"
 
 	"github.com/joho/godotenv"
 	"github.com/minio/minio-go/v7"
@@ -21,22 +25,22 @@ import (
 )
 
 func main() {
-	// Загружаем переменные окружения из .env
+	// Загружаем переменные окружения
 	if err := godotenv.Load(); err != nil {
 		log.Println("no .env file found, using OS env only")
 	}
 
-	// 1. Загружаем конфигурацию приложения
 	cfg := config.Load()
 
-	// 2. Подключаемся к PostgreSQL и накатываем миграции
+	// 1. База данных
 	sqlDB, err := db.NewPostgres(cfg.DBDsn, "./migrations")
 	if err != nil {
 		log.Fatalf("connect to db / run migrations: %v", err)
 	}
 	defer sqlDB.Close()
 
-	// 3. Инициализируем S3 клиент (MinIO)
+	// 2. Логгер и S3
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
 	minioClient, err := minio.New(cfg.S3Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 		Secure: false,
@@ -45,42 +49,47 @@ func main() {
 		log.Fatalf("failed to init minio client: %v", err)
 	}
 
-	// Инициализируем логгер
-	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-
-	// 4. Инициализируем Шину Событий (EventBus)
+	// 3. Шина событий (EventBus)
 	bus := eventbus.NewEventBus(logger)
 
-	// 5. Создаём ВСЕ репозитории первыми (добавили notifRepo)
+	// 4. Репозитории
 	taskRepo := repository.NewTaskRepository()
 	projectRepo := repository.NewProjectRepository()
 	userRepo := repository.NewUserRepository()
 	eventRepo := repository.NewEventRepository()
 	notifRepo := repository.NewNotificationRepository()
 
-	// 6. Создаём ВСЕ сервисы
-	// Важно: прокидываем bus в те сервисы, которые генерируют события
+	// 5. Сервисы
 	authService := services.NewAuthService(sqlDB, userRepo, cfg.JWTToken, logger)
 	taskService := services.NewTaskService(sqlDB, taskRepo, logger, bus)
 	projectService := services.NewProjectService(sqlDB, projectRepo, logger, bus)
 	eventService := services.NewEventService(sqlDB, eventRepo, logger, bus)
-
-	// Создаем сервис уведомлений (он будет слушать шину)
 	notifService := services.NewNotificationService(sqlDB, notifRepo, taskRepo, eventRepo, logger)
 
-	// 7. Запускаем фоновый воркер шины событий
+	// 6. Настройка и запуск EventBus
 	bus.SetHandler(notifService.HandleEvent)
-	bus.Start(context.Background())
-	defer bus.Stop() // Гарантирует, что при выключении сервера все эвенты из очереди допишутся в БД
 
-	// 8. Создаём HTTP-хендлеры (добавили notificationHandler)
+	// Контекст для фоновых задач (Bus и Workers)
+	appCtx, cancel := context.WithCancel(context.Background())
+
+	// ВАЖНО: defer выполняется снизу вверх!
+	defer bus.Stop() // 2. Подождет завершения воркеров
+	defer cancel()   // 1. Моментально пошлет сигнал выключения всем фоновым задачам
+
+	bus.Start(appCtx)
+
+	// 7. Инициализация и запуск фонового воркера (Напоминания 24ч)
+	deadlineWorker := workers.NewDeadlineWorker(sqlDB, bus, logger)
+	deadlineWorker.Start(appCtx)
+
+	// 8. Хендлеры
 	authHandler := handlers.NewAuthHandler(authService, minioClient, cfg.S3Bucket, cfg.S3Endpoint)
 	projectHandler := handlers.NewProjectHandler(projectService)
 	taskHandler := handlers.NewTaskHandler(taskService)
 	eventHandler := handlers.NewEventHandler(eventService)
 	notificationHandler := handlers.NewNotificationHandler(notifService)
 
-	// 9. Собираем роутер (прокинули notificationHandler)
+	// 9. Роутер
 	r := router.NewRouter(
 		authHandler,
 		projectHandler,
@@ -90,11 +99,32 @@ func main() {
 		[]byte(cfg.JWTToken),
 	)
 
-	// 10. Запускаем HTTP-сервер
-	addr := ":" + cfg.HTTPPort
-	log.Printf("starting HTTP server on %s\n", addr)
-
-	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("ListenAndServe: %v", err)
+	// 10. Запуск сервера с поддержкой Graceful Shutdown
+	server := &http.Server{
+		Addr:    ":" + cfg.HTTPPort,
+		Handler: r,
 	}
+
+	go func() {
+		log.Printf("starting HTTP server on %s\n", server.Addr)
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	// Ожидаем сигнала прерывания
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Println("shutting down server...")
+
+	// Даем серверу 5 секунд на завершение текущих запросов
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := server.Shutdown(shutdownCtx); err != nil {
+		log.Fatal("server forced to shutdown:", err)
+	}
+
+	log.Println("server exited")
 }
