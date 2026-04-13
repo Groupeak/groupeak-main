@@ -15,7 +15,7 @@ type NotificationService struct {
 	db        *sql.DB
 	notifRepo repository.NotificationRepository
 	taskRepo  repository.TaskRepository
-	eventRepo repository.EventRepository // Добавили для митингов
+	eventRepo repository.EventRepository
 	logger    *slog.Logger
 }
 
@@ -34,25 +34,35 @@ func (s *NotificationService) HandleEvent(ctx context.Context, e eventbus.System
 	var targetUserIDs []int64
 
 	switch e.Type {
-	case models.EventTypeTaskCreated, models.EventTypeTaskUpdated, models.EventTypeTaskDeleted, models.EventTypeTaskReviewed:
-		// Если это задача - берем исполнителей
+	case models.EventTypeTaskCreated, models.EventTypeTaskUpdated,
+		models.EventTypeTaskReviewed, models.EventTypeTaskDeadline:
 		assignees, err := s.taskRepo.GetAssigneesForTask(ctx, s.db, e.EntityID)
 		if err == nil {
 			targetUserIDs = assignees
 		}
 
-	case models.EventTypeProjectMember, models.EventTypeProjectKicked:
-		// Если инвайт/кик - берем ID из payload
+	case models.EventTypeProjectMember, models.EventTypeProjectKicked,
+		models.EventTypeTaskUnassigned:
 		if tID, ok := e.Payload["target_user_id"].(int64); ok {
 			targetUserIDs = []int64{tID}
 		}
 
-	case models.EventTypeEventCreated, models.EventTypeEventUpdated:
-		// Если изменился митинг - берем участников
+	case models.EventTypeEventCreated, models.EventTypeEventUpdated,
+		models.EventTypeEventReminder:
 		partsMap, err := s.eventRepo.GetParticipantsForEvents(ctx, s.db, []int{int(e.EntityID)})
 		if err == nil && len(partsMap[int(e.EntityID)]) > 0 {
 			for _, pID := range partsMap[int(e.EntityID)] {
 				targetUserIDs = append(targetUserIDs, int64(pID))
+			}
+		}
+
+	case models.EventTypeEventDeleted, models.EventTypeProjectUpdated,
+		models.EventTypeProjectDeleted, models.EventTypeTaskDeleted: 
+		if pIDs, ok := e.Payload["target_user_ids"].([]int64); ok {
+			targetUserIDs = pIDs
+		} else if pIDsInt, ok := e.Payload["target_user_ids"].([]int); ok {
+			for _, id := range pIDsInt {
+				targetUserIDs = append(targetUserIDs, int64(id))
 			}
 		}
 	}
@@ -64,8 +74,8 @@ func (s *NotificationService) HandleEvent(ctx context.Context, e eventbus.System
 	}
 
 	for _, targetID := range targetUserIDs {
-		if targetID == e.ActorID {
-			continue // Самому себе не шлем
+		if e.ActorID != 0 && targetID == e.ActorID {
+			continue
 		}
 
 		entID := e.EntityID
@@ -75,12 +85,16 @@ func (s *NotificationService) HandleEvent(ctx context.Context, e eventbus.System
 			ProjectID: e.ProjectID,
 			UserID:    targetID,
 			ActorID:   &actorID,
-			Type:      e.Type, // Используем строгий тип
+			Type:      e.Type,
 			EntityID:  &entID,
 			Payload:   payloadBytes,
 		}
 
-		_ = s.notifRepo.Create(ctx, s.db, n)
+		if err := s.notifRepo.Create(ctx, s.db, n); err != nil {
+			s.logger.Error("failed to save notification",
+				slog.Int64("user_id", targetID),
+				slog.String("error", err.Error()))
+		}
 	}
 }
 
