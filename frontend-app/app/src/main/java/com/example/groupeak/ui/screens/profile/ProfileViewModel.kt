@@ -53,17 +53,20 @@ class ProfileViewModel(
     fun onSaveClick() {
         val fullName = uiState.fullName.normalizeSpaces()
         if (fullName.isBlank()) {
+            uiState = uiState.copy(fullNameError = true)
             showStatusMessage("Имя не должно быть пустым", isError = true)
             return
         }
 
         if (!isValidFullName(fullName)) {
+            uiState = uiState.copy(fullNameError = true)
             showStatusMessage("Некорректные данные", isError = true)
             return
         }
 
         val birthDateForBackend = digitsToBackendBirthDate(uiState.birthDate)
         if (birthDateForBackend == null) {
+            uiState = uiState.copy(birthDateError = true)
             showStatusMessage("Неверный формат даты рождения", isError = true)
             return
         }
@@ -91,6 +94,10 @@ class ProfileViewModel(
                 )
                 showStatusMessage("Изменения сохранены", isError = false)
             }.onFailure { throwable ->
+                val backendMessage = throwable.message?.trim()
+                if (backendMessage == "invalid birth date, expected format dd.mm.yyyy" || backendMessage == "birth date must make age between 8 and 100 years") {
+                    uiState = uiState.copy(birthDateError = true)
+                }
                 showStatusMessage(
                     mapProfileErrorToRussian(throwable.message),
                     isError = true,
@@ -171,5 +178,7 @@ class ProfileViewModel(
     private fun ProfileUiState.clearStatus(): ProfileUiState = copy(
         statusMessage = null,
         statusMessageIsError = false,
+        fullNameError = false,
+        birthDateError = false,
     )
 }

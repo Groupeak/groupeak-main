@@ -190,11 +190,10 @@ fun CreateProjectScreen(
         delay(140)
         showStatusText = true
 
-        if (!uiState.statusMessageIsError) {
-            delay(2100)
-            showStatusText = false
-            isExpanded = false
-        }
+        kotlinx.coroutines.delay(2100)
+        showStatusText = false
+        kotlinx.coroutines.delay(280)
+        isExpanded = false
     }
 
     GroupeakBackground {
@@ -238,13 +237,7 @@ fun CreateProjectScreen(
                                 labelStartPadding = LabelStartPaddingFromCard,
                                 iconRes = R.drawable.ic_folder,
                                 value = uiState.projectName,
-                                onValueChange = {
-                                    onProjectNameChange(it)
-                                    if (showStatusText || isExpanded) {
-                                        showStatusText = false
-                                        isExpanded = false
-                                    }
-                                },
+                                onValueChange = onProjectNameChange,
                                 placeholder = "Название проекта",
                                 readOnly = false,
                                 error = uiState.projectNameError,
@@ -258,13 +251,7 @@ fun CreateProjectScreen(
                                 labelStartPadding = LabelStartPaddingFromCard,
                                 iconRes = R.drawable.ic_calendar,
                                 value = uiState.deadline,
-                                onValueChange = {
-                                    onDeadlineChange(it)
-                                    if (showStatusText || isExpanded) {
-                                        showStatusText = false
-                                        isExpanded = false
-                                    }
-                                },
+                                onValueChange = onDeadlineChange,
                                 placeholder = "ДД.ММ.ГГГГ",
                                 readOnly = false,
                                 error = uiState.deadlineError,
@@ -291,14 +278,9 @@ fun CreateProjectScreen(
                             MultilineFieldScrollable(
                                 placeholder = "Описание проекта",
                                 value = uiState.description,
-                                onValueChange = {
-                                    onDescriptionChange(it)
-                                    if (showStatusText || isExpanded) {
-                                        showStatusText = false
-                                        isExpanded = false
-                                    }
-                                },
+                                onValueChange = onDescriptionChange,
                                 fieldModifier = Modifier.requiredWidth(FieldWidth),
+                                isError = !uiState.descriptionError.isNullOrBlank(),
                             )
 
                             Spacer(modifier = Modifier.height(GapFromBigFieldToButton))
@@ -330,7 +312,7 @@ fun CreateProjectScreen(
                                         text = statusMessage,
                                         style = StatusMessageTextStyle.copy(
                                             color = if (uiState.statusMessageIsError) {
-                                                Color(0xFFD32F2F)
+                                                Color(0xFFFF0000)
                                             } else {
                                                 Color(0xFF26BC30)
                                             }
@@ -446,7 +428,7 @@ private fun LabeledInputField(
         Row(
             modifier = fieldModifier
                 .requiredHeight(fieldHeight)
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                .border(1.dp, if (!error.isNullOrBlank()) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(start = 11.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -489,15 +471,6 @@ private fun LabeledInputField(
                 )
             }
         }
-
-        if (!error.isNullOrBlank()) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = error,
-                style = ErrorTextStyle,
-                modifier = Modifier.padding(start = labelStartPadding),
-            )
-        }
     }
 }
 
@@ -509,6 +482,7 @@ private fun MultilineFieldScrollable(
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
     fieldHeight: Dp = BigFieldHeight,
+    isError: Boolean = false,
 ) {
     val scrollState = rememberScrollState()
 
@@ -518,7 +492,7 @@ private fun MultilineFieldScrollable(
                 .requiredHeight(fieldHeight)
                 .border(
                     1.dp,
-                    GroupeakLightGray,
+                    if (isError) Color.Red else GroupeakLightGray,
                     RoundedCornerShape(18.dp),
                 )
                 .padding(horizontal = 14.dp, vertical = 12.dp),

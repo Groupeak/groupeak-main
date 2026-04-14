@@ -334,8 +334,49 @@ fun TasksScreen(
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
                     if (uiState.selectedTab == TasksTab.ACTIVE) {
-                        item {
-                            SectionTitle("Текущие", visibleCurrentCount)
+                        val isCompletelyEmpty = visibleCurrentCount == 0 && displayedReviewTasks.isEmpty()
+
+                        if (isCompletelyEmpty) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 247.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "Нет задач",
+                                        fontSize = 32.sp,
+                                        fontFamily = OnestFontFamily,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF70717A),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        } else {
+                            item {
+                                SectionTitle("Текущие", visibleCurrentCount)
+                            }
+
+                        if (visibleCurrentCount == 0) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(127.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = "Нет текущих задач",
+                                        fontSize = 24.sp,
+                                        fontFamily = OnestFontFamily,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF70717A),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
                         }
 
                         items(
@@ -392,8 +433,30 @@ fun TasksScreen(
                         }
 
                         item {
-                            Spacer(modifier = Modifier.height(3.dp))
+                            if (visibleCurrentCount > 0) {
+                                Spacer(modifier = Modifier.height(3.dp))
+                            }
                             SectionTitle("На проверке", displayedReviewTasks.size)
+                        }
+
+                        if (displayedReviewTasks.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 78.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "Нет задач на проверке",
+                                        fontSize = 24.sp,
+                                        fontFamily = OnestFontFamily,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF70717A),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
                         }
 
                         items(
@@ -409,10 +472,6 @@ fun TasksScreen(
                             )
                         }
 
-                        if (visibleCurrentCount == 0 && displayedReviewTasks.isEmpty()) {
-                            item {
-                                EmptyTasksPlaceholder(text = emptyStateMessage)
-                            }
                         }
                     } else {
                         item {
@@ -436,7 +495,21 @@ fun TasksScreen(
 
                         if (inactiveTasks.isEmpty()) {
                             item {
-                                EmptyTasksPlaceholder(text = emptyStateMessage)
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(top = 247.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Text(
+                                        text = "Нет задач",
+                                        fontSize = 32.sp,
+                                        fontFamily = OnestFontFamily,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF70717A),
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
                             }
                         }
                     }
@@ -691,13 +764,19 @@ private fun TasksFilterDialog(
         Box(
             modifier = Modifier
                 .width(348.dp)
-                .height(dialogHeight)
-                .background(
-                    color = Color.White,
-                    shape = RoundedCornerShape(18.dp)
-                )
-                .clipToBounds()
+                .height(if (allowProjectSelection) 417.dp else 174.dp),
+            contentAlignment = Alignment.TopCenter
         ) {
+            Box(
+                modifier = Modifier
+                    .width(348.dp)
+                    .height(dialogHeight)
+                    .background(
+                        color = Color.White,
+                        shape = RoundedCornerShape(18.dp)
+                    )
+                    .clipToBounds()
+            ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
@@ -770,6 +849,7 @@ private fun TasksFilterDialog(
                     )
                 }
             }
+        }
         }
     }
 }

@@ -21,10 +21,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -107,6 +108,40 @@ fun CreateTaskScreen(
     var showProjectDialog by remember { mutableStateOf(false) }
     var showParticipantsDialog by remember { mutableStateOf(false) }
 
+    var isExpanded by remember { mutableStateOf(false) }
+    var showStatusText by remember { mutableStateOf(false) }
+
+    val animatedCardHeight by animateDpAsState(
+        targetValue = if (isExpanded) 675.dp + 36.dp else 675.dp,
+        animationSpec = tween(durationMillis = 520, easing = FastOutSlowInEasing),
+        label = "cardHeight",
+    )
+
+    val statusAlpha by animateFloatAsState(
+        targetValue = if (showStatusText) 1f else 0f,
+        animationSpec = tween(durationMillis = 260, easing = FastOutSlowInEasing),
+        label = "statusAlpha",
+    )
+
+    val statusSlide by animateDpAsState(
+        targetValue = if (showStatusText) 0.dp else 10.dp,
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
+        label = "statusSlide",
+    )
+
+    LaunchedEffect(uiState.statusMessagePulse) {
+        if (uiState.statusMessagePulse == 0 || uiState.statusMessage.isNullOrBlank()) return@LaunchedEffect
+
+        isExpanded = true
+        kotlinx.coroutines.delay(140)
+        showStatusText = true
+
+        kotlinx.coroutines.delay(2100)
+        showStatusText = false
+        kotlinx.coroutines.delay(280)
+        isExpanded = false
+    }
+
     GroupeakBackground {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -160,7 +195,7 @@ fun CreateTaskScreen(
             Box(
                 modifier = Modifier
                     .width(348.dp)
-                    .height(675.dp)
+                    .height(animatedCardHeight)
                     .background(Color.White, RoundedCornerShape(18.dp))
                     .padding(top = 20.dp, start = 10.dp, end = 10.dp)
             ) {
@@ -243,7 +278,7 @@ fun CreateTaskScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(117.dp)
-                            .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                            .border(1.dp, if (uiState.descriptionError != null) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                             .background(Color.White, RoundedCornerShape(18.dp))
                             .padding(start = 11.dp, end = 5.dp, top = 6.dp)
                     ) {
@@ -288,15 +323,6 @@ fun CreateTaskScreen(
                         )
                     }
 
-                    if (uiState.descriptionError != null) {
-                        Text(
-                            text = uiState.descriptionError,
-                            color = Color.Red,
-                            fontSize = 12.sp,
-                            modifier = Modifier.padding(top = 4.dp, start = 11.dp)
-                        )
-                    }
-
                     Spacer(Modifier.height(11.dp))
 
                     Text(
@@ -334,15 +360,28 @@ fun CreateTaskScreen(
                         fontSize = 14.sp
                     )
 
-                    if (!uiState.statusMessage.isNullOrBlank()) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = uiState.statusMessage,
-                            color = if (uiState.statusMessageIsError) Color.Red else Color(0xFF26BC30),
-                            fontSize = 12.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(12.dp + 36.dp)
+                            .graphicsLayer { alpha = statusAlpha }
+                            .offset(y = statusSlide),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        val statusMessage = uiState.statusMessage.orEmpty()
+                        if (statusMessage.isNotBlank()) {
+                            Text(
+                                text = statusMessage,
+                                color = if (uiState.statusMessageIsError) Color(0xFFFF0000) else Color(0xFF26BC30),
+                                fontSize = 14.sp,
+                                fontFamily = OnestFontFamily,
+                                lineHeight = 16.sp,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
                     }
                 }
             }
@@ -702,15 +741,6 @@ private fun InputFieldWithError(
                 }
             )
         }
-
-        if (error != null) {
-            Text(
-                text = error,
-                color = Color.Red,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 4.dp, start = 16.dp)
-            )
-        }
     }
 }
 
@@ -809,15 +839,6 @@ private fun SelectionFieldWithError(
                 modifier = Modifier
                     .padding(end = 16.dp)
                     .size(24.dp)
-            )
-        }
-
-        if (error != null) {
-            Text(
-                text = error,
-                color = Color.Red,
-                fontSize = 12.sp,
-                modifier = Modifier.padding(top = 4.dp, start = 16.dp)
             )
         }
     }

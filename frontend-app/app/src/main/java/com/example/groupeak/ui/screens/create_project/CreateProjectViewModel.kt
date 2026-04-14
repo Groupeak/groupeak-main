@@ -34,17 +34,23 @@ class CreateProjectViewModel(
     }
 
     fun onDescriptionChange(value: String) {
-        uiState = uiState.copy(description = value).clearStatus()
+        uiState = uiState.copy(
+            description = value,
+            descriptionError = null
+        ).clearStatus()
     }
 
     fun onCreateClick(onSuccess: () -> Unit) {
         val projectName = uiState.projectName.trim()
-        val description = uiState.description.trim().takeIf { it.isNotEmpty() }
+        val description = uiState.description.trim()
 
         var hasError = false
+        var pNameError: String? = null
+        var pDeadlineError: String? = null
+        var pDescriptionError: String? = null
 
         if (projectName.isBlank()) {
-            uiState = uiState.copy(projectNameError = "Введите название проекта")
+            pNameError = "error"
             hasError = true
         }
 
@@ -53,12 +59,37 @@ class CreateProjectViewModel(
             else -> deadlineDigitsToBackend(uiState.deadline)
         }
 
-        if (uiState.deadline.isNotBlank() && deadlineForBackend == null) {
-            uiState = uiState.copy(deadlineError = "Неверный формат даты")
+        if (uiState.deadline.isBlank() || deadlineForBackend == null) {
+            pDeadlineError = "error"
+            hasError = true
+        }
+        
+        if (description.isBlank()) {
+            pDescriptionError = "error"
             hasError = true
         }
 
-        if (hasError) return
+        if (hasError) {
+            uiState = uiState.copy(
+                projectNameError = pNameError,
+                deadlineError = pDeadlineError,
+                descriptionError = pDescriptionError
+            )
+            
+            val errorsCount = listOfNotNull(pNameError, pDeadlineError, pDescriptionError).size
+            val msg = if (errorsCount > 1) {
+                "Заполните все поля"
+            } else if (pNameError != null) {
+                "Введите название проекта"
+            } else if (pDescriptionError != null) {
+                "Введите описание"
+            } else {
+                if (uiState.deadline.isBlank()) "Введите дату" else "Неверный формат даты"
+            }
+            
+            showStatusMessage(msg, isError = true)
+            return
+        }
 
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
@@ -82,7 +113,12 @@ class CreateProjectViewModel(
     private fun handleBackendError(message: String) {
         when {
             message.contains("project name is required", ignoreCase = true) -> {
-                uiState = uiState.copy(projectNameError = "Введите название проекта")
+                uiState = uiState.copy(projectNameError = "error")
+                showStatusMessage("Введите название проекта", isError = true)
+            }
+            message.contains("already exists", ignoreCase = true) || message.contains("conflict", ignoreCase = true) -> {
+                uiState = uiState.copy(projectNameError = "error")
+                showStatusMessage("Проект с таким названием уже существует", isError = true)
             }
             message.contains("unauthorized", ignoreCase = true) -> {
                 showStatusMessage("Нужно заново войти в аккаунт", isError = true)

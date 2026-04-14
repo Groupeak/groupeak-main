@@ -10,4 +10,6 @@ data class ProfileUiState(
     val statusMessage: String? = null,
     val statusMessageIsError: Boolean = false,
     val statusMessagePulse: Int = 0,
+    val fullNameError: Boolean = false,
+    val birthDateError: Boolean = false,
 )

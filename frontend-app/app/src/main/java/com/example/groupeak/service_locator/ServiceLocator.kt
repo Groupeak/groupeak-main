@@ -7,10 +7,12 @@ import com.example.groupeak.data.remote.repository.AuthRepositoryImpl
 import com.example.groupeak.data.remote.repository.ProjectRepositoryImpl
 import com.example.groupeak.data.remote.repository.TaskRepositoryImpl
 import com.example.groupeak.data.remote.repository.UserRepositoryImpl
+import com.example.groupeak.data.remote.repository.EventRepositoryImpl
 import com.example.groupeak.domain.repository.AuthRepository
 import com.example.groupeak.domain.repository.ProjectRepository
 import com.example.groupeak.domain.repository.TaskRepository
 import com.example.groupeak.domain.repository.UserRepository
+import com.example.groupeak.domain.repository.EventRepository
 
 object ServiceLocator {
 
@@ -35,6 +37,11 @@ object ServiceLocator {
     val taskRepository: TaskRepository by lazy {
         ApiClient.checkInitialized()
         TaskRepositoryImpl(ApiClient.taskApi)
+    }
+
+    val eventRepository: EventRepository by lazy {
+        ApiClient.checkInitialized()
+        EventRepositoryImpl(ApiClient.eventApi)
     }
 
     fun init(context: Context) {

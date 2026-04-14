@@ -40,11 +40,7 @@ class AppStartViewModel(
             val token = sessionManager.token.value
 
             if (token.isNullOrBlank()) {
-                state = if (BuildConfig.DEV_BYPASS_AUTH) {
-                    AppStartState.Main
-                } else {
-                    AppStartState.Auth
-                }
+                state = AppStartState.Auth
                 return@launch
             }
 

@@ -7,6 +7,7 @@ data class CreateProjectUiState(
     val isLoading: Boolean = false,
     val projectNameError: String? = null,
     val deadlineError: String? = null,
+    val descriptionError: String? = null,
     val statusMessage: String? = null,
     val statusMessageIsError: Boolean = false,
     val statusMessagePulse: Int = 0,

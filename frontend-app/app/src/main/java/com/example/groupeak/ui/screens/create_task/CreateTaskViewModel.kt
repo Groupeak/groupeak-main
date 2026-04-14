@@ -91,33 +91,66 @@ class CreateTaskViewModel(
         val assigneeIds = uiState.selectedParticipantIds.map { it.toInt() }
 
         var hasError = false
+        var pTitleError: String? = null
+        var pProjectError: String? = null
+        var pDeadlineError: String? = null
+        var pParticipantsError: String? = null
+        var pDescriptionError: String? = null
 
         if (title.isBlank()) {
-            uiState = uiState.copy(titleError = "Введите название задачи")
+            pTitleError = "error"
             hasError = true
         }
 
         if (projectId == null) {
-            uiState = uiState.copy(projectError = "Выберите проект")
+            pProjectError = "error"
             hasError = true
         }
 
         if (uiState.deadline.isBlank() || dueDate == null) {
-            uiState = uiState.copy(deadlineError = "Неверный формат даты")
+            pDeadlineError = "error"
             hasError = true
         }
 
         if (assigneeIds.isEmpty()) {
-            uiState = uiState.copy(participantsError = "Добавьте участников")
+            pParticipantsError = "error"
             hasError = true
         }
 
         if (uiState.description.isBlank()) {
-            uiState = uiState.copy(descriptionError = "Введите описание")
+            pDescriptionError = "error"
             hasError = true
         }
 
-        if (hasError || projectId == null || dueDate == null) return
+        if (hasError) {
+            uiState = uiState.copy(
+                titleError = pTitleError,
+                projectError = pProjectError,
+                deadlineError = pDeadlineError,
+                participantsError = pParticipantsError,
+                descriptionError = pDescriptionError
+            )
+
+            val errorsCount = listOfNotNull(pTitleError, pProjectError, pDeadlineError, pParticipantsError, pDescriptionError).size
+            val msg = if (errorsCount > 1) {
+                "Заполните все поля"
+            } else if (pTitleError != null) {
+                "Введите название задачи"
+            } else if (pProjectError != null) {
+                "Выберите проект"
+            } else if (pParticipantsError != null) {
+                "Добавьте участников"
+            } else if (pDescriptionError != null) {
+                "Введите описание"
+            } else {
+                if (uiState.deadline.isBlank()) "Введите дату" else "Неверный формат даты"
+            }
+
+            showStatusMessage(msg, isError = true)
+            return
+        }
+
+        if (projectId == null || dueDate == null) return
 
         viewModelScope.launch {
             uiState = uiState.copy(isLoading = true)
@@ -235,7 +268,8 @@ class CreateTaskViewModel(
     private fun handleBackendError(message: String) {
         when {
             message.contains("task title is required", ignoreCase = true) -> {
-                uiState = uiState.copy(titleError = "Введите название задачи")
+                uiState = uiState.copy(titleError = "error")
+                showStatusMessage("Введите название задачи", isError = true)
             }
 
             message.contains("invalid task priority", ignoreCase = true) -> {
@@ -243,19 +277,23 @@ class CreateTaskViewModel(
             }
 
             message.contains("invalid assignee_ids", ignoreCase = true) -> {
-                uiState = uiState.copy(participantsError = "Некорректные участники")
+                uiState = uiState.copy(participantsError = "error")
+                showStatusMessage("Некорректные участники", isError = true)
             }
 
             message.contains("one or more assignees do not exist", ignoreCase = true) -> {
-                uiState = uiState.copy(participantsError = "Некоторые участники не найдены")
+                uiState = uiState.copy(participantsError = "error")
+                showStatusMessage("Некоторые участники не найдены", isError = true)
             }
 
             message.contains("one or more assignees have no access to this project", ignoreCase = true) -> {
-                uiState = uiState.copy(participantsError = "Участники не состоят в проекте")
+                uiState = uiState.copy(participantsError = "error")
+                showStatusMessage("Участники не состоят в проекте", isError = true)
             }
 
             message.contains("due date cannot be in the past", ignoreCase = true) -> {
-                uiState = uiState.copy(deadlineError = "Дедлайн не может быть в прошлом")
+                uiState = uiState.copy(deadlineError = "error")
+                showStatusMessage("Дедлайн не может быть в прошлом", isError = true)
             }
 
             message.contains("user is not project owner", ignoreCase = true) -> {
@@ -267,7 +305,8 @@ class CreateTaskViewModel(
             }
 
             message.contains("text is too long", ignoreCase = true) -> {
-                uiState = uiState.copy(descriptionError = "Описание слишком длинное")
+                uiState = uiState.copy(descriptionError = "error")
+                showStatusMessage("Описание слишком длинное", isError = true)
             }
 
             message.contains("internal server error", ignoreCase = true) -> {
@@ -287,6 +326,7 @@ class CreateTaskViewModel(
         uiState = uiState.copy(
             statusMessage = message,
             statusMessageIsError = isError,
+            statusMessagePulse = uiState.statusMessagePulse + 1,
         )
     }
 

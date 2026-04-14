@@ -360,7 +360,8 @@ fun ProfileScreen(
                                         fieldHeight = 55.dp,
                                         gapBetween = 6.dp,
                                         labelStartPadding = 16.dp,
-                                        placeholder = "Не указано"
+                                        placeholder = "Не указано",
+                                        isError = uiState.fullNameError
                                     )
                                 }
 
@@ -382,7 +383,8 @@ fun ProfileScreen(
                                         fieldHeight = 55.dp,
                                         gapBetween = 5.dp,
                                         labelStartPadding = 16.dp,
-                                        placeholder = "ДД.ММ.ГГГГ"
+                                        placeholder = "ДД.ММ.ГГГГ",
+                                        isError = uiState.birthDateError
                                     )
 
                                     if (!uiState.isEditing) {
@@ -1055,7 +1057,8 @@ private fun LabeledInputField(
     contentEndPadding: Dp = 14.dp,
     iconSize: Dp = 22.dp,
     iconTextGap: Dp = 12.dp,
-    placeholder: String = ""
+    placeholder: String = "",
+    isError: Boolean = false
 ) {
     Column(modifier = modifier) {
         Box(
@@ -1081,7 +1084,7 @@ private fun LabeledInputField(
             modifier = fieldModifier
                 .fillMaxWidth()
                 .height(fieldHeight)
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                .border(1.dp, if (isError) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(start = iconStartPadding, end = contentEndPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -1240,7 +1243,8 @@ private fun BirthDateField(
     contentEndPadding: Dp = 14.dp,
     iconSize: Dp = 22.dp,
     iconTextGap: Dp = 12.dp,
-    placeholder: String = "ДД.ММ.ГГГГ"
+    placeholder: String = "ДД.ММ.ГГГГ",
+    isError: Boolean = false
 ) {
     Column(modifier = modifier) {
         Box(
@@ -1266,7 +1270,7 @@ private fun BirthDateField(
             modifier = fieldModifier
                 .fillMaxWidth()
                 .height(fieldHeight)
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                .border(1.dp, if (isError) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(start = iconStartPadding, end = contentEndPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {

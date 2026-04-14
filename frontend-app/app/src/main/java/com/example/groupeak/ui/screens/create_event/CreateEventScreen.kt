@@ -216,7 +216,7 @@ fun CreateEventScreen(
                         // Проект
                         SelectionFieldWithError(
                             label = "Проект",
-                            iconRes = R.drawable.ic_project,
+                            iconRes = R.drawable.ic_folder,
                             selectedText = uiState.project,
                             placeholder = "Выберите проект для мероприятия",
                             error = null,
@@ -387,13 +387,7 @@ fun CreateEventScreen(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF)),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
-                        val projects = listOf(
-                            "SmartHome",
-                            "LinUX",
-                            "Программа для Tahoe",
-                            "Peak.Group",
-                            "ManageGroup"
-                        )
+                        val projects = uiState.availableProjects.map { it.name }
 
                         Column(
                             modifier = Modifier
@@ -487,13 +481,7 @@ fun CreateEventScreen(
                         colors = CardDefaults.cardColors(containerColor = Color(0xFFFFFFFF)),
                         elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
                     ) {
-                        val members = listOf(
-                            "Михаил Д." to "Frontend",
-                            "Василий П." to "Backend",
-                            "Андрей П." to "Designer",
-                            "Алексей В." to "PR",
-                            "Юрий X." to "Full-stack"
-                        )
+                        val members = uiState.availableMembers.map { it.fullName to it.position }
 
                         Column(
                             modifier = Modifier

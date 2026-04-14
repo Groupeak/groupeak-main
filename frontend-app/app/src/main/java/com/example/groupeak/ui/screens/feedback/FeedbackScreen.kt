@@ -114,6 +114,8 @@ fun FeedbackScreen(
 ) {
     var subject by rememberSaveable { mutableStateOf("") }
     var message by rememberSaveable { mutableStateOf("") }
+    var subjectError by rememberSaveable { mutableStateOf(false) }
+    var messageError by rememberSaveable { mutableStateOf(false) }
 
     var isExpanded by rememberSaveable { mutableStateOf(false) }
     var showSentText by rememberSaveable { mutableStateOf(false) }
@@ -220,11 +222,13 @@ fun FeedbackScreen(
                                 value = subject,
                                 onValueChange = {
                                     subject = it
+                                    subjectError = false
                                     if (showSentText || isExpanded) {
                                         showSentText = false
                                         isExpanded = false
                                     }
                                 },
+                                isError = subjectError,
                                 placeholder = "Проблема со входом в аккаунт",
                                 readOnly = false,
                                 fieldModifier = Modifier.requiredWidth(FieldWidth)
@@ -237,11 +241,13 @@ fun FeedbackScreen(
                                 value = message,
                                 onValueChange = {
                                     message = it
+                                    messageError = false
                                     if (showSentText || isExpanded) {
                                         showSentText = false
                                         isExpanded = false
                                     }
                                 },
+                                isError = messageError,
                                 fieldModifier = Modifier
                                     .requiredWidth(FieldWidth)
                                     .requiredHeight(BigFieldHeight)
@@ -259,6 +265,9 @@ fun FeedbackScreen(
                                 onClick = {
                                     val isSubjectEmpty = subject.trim().isEmpty()
                                     val isMessageEmpty = message.trim().isEmpty()
+
+                                    subjectError = isSubjectEmpty
+                                    messageError = isMessageEmpty
 
                                     if (isSubjectEmpty || isMessageEmpty) {
                                         statusText = "Введите тему и описание обращения"
@@ -377,7 +386,8 @@ private fun LabeledInputField(
     readOnly: Boolean,
     modifier: Modifier = Modifier,
     fieldModifier: Modifier = Modifier,
-    fieldHeight: Dp = FieldHeight
+    fieldHeight: Dp = FieldHeight,
+    isError: Boolean = false
 ) {
     Column(modifier = modifier) {
         Text(
@@ -394,7 +404,7 @@ private fun LabeledInputField(
         Row(
             modifier = fieldModifier
                 .requiredHeight(fieldHeight)
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                .border(1.dp, if (isError) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(start = 11.dp, end = 14.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -444,14 +454,15 @@ private fun MultilineFieldScrollable(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
-    fieldModifier: Modifier = Modifier
+    fieldModifier: Modifier = Modifier,
+    isError: Boolean = false
 ) {
     val scrollState = rememberScrollState()
 
     Column(modifier = modifier) {
         Box(
             modifier = fieldModifier
-                .border(1.dp, GroupeakLightGray, RoundedCornerShape(18.dp))
+                .border(1.dp, if (isError) Color.Red else GroupeakLightGray, RoundedCornerShape(18.dp))
                 .padding(horizontal = 14.dp, vertical = 12.dp)
         ) {
             BasicTextField(

@@ -38,4 +38,5 @@ data class CreateTaskUiState(
 
     val statusMessage: String? = null,
     val statusMessageIsError: Boolean = false,
+    val statusMessagePulse: Int = 0,
 )
