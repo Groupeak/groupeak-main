@@ -1,211 +1,143 @@
 # 🧩 Архитектура backend-приложения
 
 ```txt
-backend-app/
-├─ cmd/
-│  └─ api/
-│     └─ main.go
-│
-├─ internal/
-│  ├─ config/
-│  │  └─ config.go
-│  │
-│  ├─ db/
-│  │  ├─ postgres.go
-│  │  └─ redis.go
-│  │
-│  ├─ models/
-│  │  ├─ user.go
-│  │  ├─ project.go
-│  │  └─ task.go
-│  │
-│  ├─ services/
-│  │  ├─ auth_service.go
-│  │  ├─ user_service.go
-│  │  ├─ project_service.go
-│  │  └─ task_service.go
-│  │
-│  ├─ handlers/
-│  │  ├─ auth_handlers.go
-│  │  ├─ user_handlers.go
-│  │  ├─ project_handlers.go
-│  │  └─ task_handlers.go
-│  │
-│  ├─ middleware/
-│  │  ├─ auth_middleware.go
-│  │  ├─ logging_middleware.go
-│  │  └─ recovery_middleware.go
-│  │
-│  └─ router/
-│     └─ router.go
-│
-├─ migrations/
-│  ├─ 001_create_users.sql
-│  ├─ 002_create_projects.sql
-│  ├─ 003_create_tasks.sql
-│  ├─ 004_create_project_calendar.sql
-│  ├─ 005_notifications.sql
-│
-├─ Dockerfile
-├─ docker-compose.yml
-├─ .env
-├─ go.mod
-├─ go.sum
-└─ README.md
+📦 groupeak-main/
+├── backend-app/
+│   ├── cmd/
+│   │   └── api/
+│   │       └── main.go
+│   ├── docs/
+│   │   ├── docs.go
+│   │   ├── swagger.json
+│   │   └── swagger.yaml
+│   ├── internal/
+│   │   ├── apperror/
+│   │   │   └── error.go
+│   │   ├── config/
+│   │   │   └── config.go
+│   │   ├── db/
+│   │   │   └── postgres.go
+│   │   ├── dto/
+│   │   │   ├── event_dto.go
+│   │   │   ├── notification_dto.go
+│   │   │   ├── project_dto.go
+│   │   │   ├── task_dto.go
+│   │   │   └── user_dto.go
+│   │   ├── eventbus/
+│   │   │   └── bus.go
+│   │   ├── handlers/
+│   │   │   ├── auth_handlers.go
+│   │   │   ├── event_handlers.go
+│   │   │   ├── helper_handlers.go
+│   │   │   ├── notification_handlers.go
+│   │   │   ├── proj_mem_handlers.go
+│   │   │   ├── project_handlers.go
+│   │   │   ├── task_handlers.go
+│   │   │   ├── task_work_handlers.go
+│   │   │   └── user_handlers.go
+│   │   ├── middleware/
+│   │   │   └── auth_middleware.go
+│   │   ├── models/
+│   │   │   ├── event.go
+│   │   │   ├── notification.go
+│   │   │   ├── project.go
+│   │   │   ├── task.go
+│   │   │   └── user.go
+│   │   ├── repository/
+│   │   │   ├── event_repo.go
+│   │   │   ├── notification_repo.go
+│   │   │   ├── project_repo.go
+│   │   │   ├── repository.go
+│   │   │   ├── task_repo.go
+│   │   │   └── user_repo.go
+│   │   ├── router/
+│   │   │   └── router.go
+│   │   ├── services/
+│   │   │   ├── auth_service.go
+│   │   │   ├── event_service.go
+│   │   │   ├── notification_service.go
+│   │   │   ├── project_invites.go
+│   │   │   ├── project_service.go
+│   │   │   ├── task_service.go
+│   │   │   ├── task_workflow.go
+│   │   │   ├── user_service.go
+│   │   │   └── validate_service.go
+│   │   └── worker/
+│   │       └── deadline_worker.go
+│   ├── migrations/
+│   │   ├── 001_init_schema.sql
+│   │   ├── 002_add_project_events.sql
+│   │   ├── 003_upgrade_notifications.sql
+│   │   └── 004_fix_notifications_logic.sql
+│   ├── .env
+│   ├── go.mod
+│   └── go.sum
+├── .gitignore
+├── .pre-commit-config.yaml
+├── go.work
+├── go.work.sum
+├── README.md
+└── ~
 ```
-
-## Основные слои
-
-* **`cmd/api/main.go`** – точка входа:
-
-  * загружает конфиг,
-  * поднимает подключения к PostgreSQL и Redis,
-  * запускает автомиграции БД через goose,
-  * собирает роутер и middleware,
-  * запускает HTTP-сервер.
-
-* **`internal/config/`** – конфигурация:
-
-  * `config.go` читает переменные окружения / `.env`,
-  * собирает структуру `Config` (порты, подключения к БД, секреты и т.д.).
-
-* **`internal/db/`** – доступ к хранилищам:
-
-  * `postgres.go` – инициализация пула подключений к PostgreSQL и запуск SQL-миграций (goose.Up),
-  * `redis.go` – клиент Redis (кэш, сессии, токены).
-
-* **`internal/models/`** – модели домена:
-
-  * `user.go`, `project.go`, `task.go` описывают сущности и DTO,
-  * структуры мапятся на таблицы БД и JSON-ответы.
-
-* **`internal/services/`** – бизнес-логика:
-
-  * `auth_service.go` – регистрация, логин, работа с паролями и токенами,
-  * `user_service.go` – управление пользователями,
-  * `project_service.go` – операции с проектами,
-  * `task_service.go` – операции с задачами.
-  * Сервисы знают про БД/Redis, но не про HTTP.
-
-* **`internal/handlers/`** – HTTP-обработчики:
-
-  * принимают запрос (JSON/параметры),
-  * вызывают нужный сервис,
-  * формируют HTTP-ответ (статус + JSON).
-
-* **`internal/middleware/`** – общие прослойки:
-
-  * `auth_middleware.go` – проверка JWT/сессии и проброс `userID` в контекст,
-  * `logging_middleware.go` – логирование запросов и ответов,
-  * `recovery_middleware.go` – защита от паник (возврат 500 вместо падения сервера).
-
-* **`internal/router/router.go`** – маршрутизация:
-
-  * создание и настройка роутера,
-  * подключение middleware,
-  * регистрация маршрутов (`/auth`, `/users`, `/projects`, `/tasks`).
-
-* **`migrations/`** – SQL-миграции (goose):
-
-  * `001_create_users.sql` – таблица пользователей,
-  * `002_create_projects.sql` – таблица проектов,
-  * `003_create_tasks.sql` – таблица задач и индексы по проекту/исполнителю,
-  * `004_create_project_calendar.sql` – таблица событий календаря и индекс по проекту,
-  * `005_notifications.sql` – таблица уведомлений и индексы по связям.
 
 ---
 
-## 🗄️ Миграции БД (goose)
+Проект построен на **Слоистой архитектуре (Layered Architecture)** с четким разделением зон ответственности. Это позволяет легко тестировать код, менять базу данных или протоколы общения без переписывания всей бизнес-логики.
 
-В проекте используется инструмент миграций **[github.com/pressly/goose](https://github.com/pressly/goose)**.
+## Основные слои и директории
 
-### Формат SQL-миграций
+### 1. Точка входа и конфигурация
+* **`cmd/api/main.go`** – сердце приложения. Собирает зависимости (Dependency Injection), инициализирует БД, запускает воркеры, накатывает миграции, поднимает HTTP-сервер.
+* **`internal/config/`** – парсинг конфигурации (переменные окружения, `.env`).
+* **`internal/db/`** – управление подключениями к инфраструктуре (PostgreSQL, Redis пулы).
 
-Каждый файл в `migrations/` имеет два блока:
+### 2. Транспортный слой (Presentation Layer)
+Отвечает за прием запросов от клиента и отдачу ответов. Ничего не знает про базу данных.
+* **`internal/router/`** – регистрация маршрутов и привязка их к хэндлерам.
+* **`internal/middleware/`** – перехватчики запросов (авторизация по JWT, логирование, защита от паник).
+* **`internal/handlers/`** – HTTP-контроллеры. Парсят входящий JSON, вызывают нужный сервис и формируют HTTP-ответ.
+* **`docs/`** – автосгенерированная документация Swagger (OpenAPI).
 
-```sql
--- +goose Up
--- SQL, который применяется при обновлении схемы (создание/изменение)
+### 3. Слой бизнес-логики (Business Layer)
+Все правила приложения. Этот слой не знает про HTTP-запросы и SQL-запросы.
+* **`internal/services/`** – ядро системы. Содержит логику создания задач, проверки прав, распределения ролей в проекте и т.д.
+* **`internal/eventbus/`** – внутренняя шина событий. Позволяет сервисам общаться асинхронно (например, сервис задач кидает событие "задача создана", а сервис уведомлений его ловит).
+* **`internal/worker/`** – фоновые процессы. Например, `deadline_worker.go` может по крону проверять просроченные задачи и генерировать события.
 
--- +goose Down
--- SQL для отката (возврат схемы к предыдущему состоянию)
-```
+### 4. Слой доступа к данным (Data Access Layer)
+Изолирует работу с хранилищами (SQL, кэш).
+* **`internal/repository/`** – реализация паттерна Repository. Только здесь пишутся SQL-запросы. Сервисы общаются с базой строго через интерфейсы репозиториев.
 
-Goose хранит текущую версию схемы в служебной таблице `goose_db_version` и при запуске применяет только те миграции, которые ещё не были выполнены.
-
-### Автомиграции при старте backend-приложения
-
-Файл `internal/db/postgres.go`:
-
-* создаёт подключение к PostgreSQL через `pgx`,
-* настраивает диалект `postgres` для goose,
-* вызывает:
-
-```go
-goose.Up(db, "./migrations")
-```
-
-Это означает, что при каждом старте `cmd/api`:
-
-* backend автоматически проверяет состояние схемы БД,
-* накатывает все новые миграции из директории `./migrations`,
-* если что-то пошло не так (ошибка SQL / нет доступа к БД), приложение не стартует и пишет ошибку в лог.
+### 5. Доменные сущности и контракты
+* **`internal/models/`** – чистые доменные структуры данных, описывающие сущности (User, Task, Project). Мапятся на таблицы в БД.
+* **`internal/dto/`** – Data Transfer Objects. Структуры, описывающие то, что приходит от клиента (requests) и уходит клиенту (responses). Защищают доменные модели от прямого изменения извне.
+* **`internal/apperror/`** – централизованная система кастомных ошибок приложения для единообразной отдачи статусов клиенту.
 
 ---
 
-# 🗄️ Схема базы данных
+## 🔄 Жизненный цикл запроса
 
-В проекте используется 5 основных таблиц:
+Общение между слоями происходит строго **сверху вниз** (или от внешнего круга к внутреннему). 
 
-1. **`users`** – пользователи
+1.  **Запрос (Router ➡️ Middleware ➡️ Handler):** Пользователь дергает эндпоинт (например, `POST /tasks`). Запрос проходит через `auth_middleware`, который достает `userID`. Далее управление переходит в `task_handlers.go`.
+2.  **Валидация (Handler ➡️ DTO):** Хэндлер парсит JSON-тело в структуру `TaskCreateDTO` и валидирует базовые поля.
+3.  **Бизнес-логика (Handler ➡️ Service):** Хэндлер вызывает метод сервиса `task_service.CreateTask(dto, userID)`. Сервис проверяет сложные правила (например, есть ли у пользователя права в этом проекте, обращаясь к `project_repo`).
+4.  **Работа с БД (Service ➡️ Repository):** Если всё ок, сервис передает доменную модель в `task_repo.Create(task)`. Репозиторий выполняет `INSERT` в PostgreSQL и возвращает готовый объект с присвоенным ID.
+5.  **Асинхронные события (Service ➡️ EventBus):** Сервис задач отправляет в `bus.go` событие `TaskCreatedEvent`. В фоне `notification_service` ловит это событие и создает уведомление для исполнителя. Главный поток не блокируется.
+6.  **Ответ (Service ➡️ Handler ➡️ Ответ):** Сервис возвращает готовую задачу в хэндлер. Хэндлер мапит модель в `TaskResponseDTO` и отдает клиенту JSON со статусом `201 Created`.
 
-   * ключевые поля: `id`, `full_name`, `avatar_url`, `email` (уникальный), `password_hash`, `position`, `created_at`, `updated_at`;
-   * связи:
+---
 
-     * владелец проектов: `projects.owner_id → users.id`;
-     * исполнитель задач: `tasks.assignee_id → users.id`;
-     * адресат уведомлений: `notifications.user_id → users.id`.
+## 🗄️ Миграции БД (goose) и База Данных
 
-2. **`projects`** – проекты
+В директории `migrations/` лежат SQL-файлы, которые автоматически применяются при старте `cmd/api`. 
+* `001_init_schema.sql` – базовые таблицы (users, projects, tasks).
+* `002...` до `004...` – эволюция БД (добавление логики событий и фиксы структуры уведомлений).
 
-   * поля: `id`, `owner_id`, `name`, `description`, `deadline_at`, `created_at`, `updated_at`;
-   * связи:
-
-     * владелец: `owner_id → users.id`;
-     * задачи проекта: `tasks.project_id → projects.id`;
-     * уведомления: `notifications.project_id → projects.id`;
-     * события календаря: `project_calendar.project_id → projects.id`.
-
-3. **`tasks`** – задачи
-
-   * поля: `id`, `project_id`, `title`, `description`, `comments`, `status` (`todo/in_progress/done/postponed`), `priority` (`low/medium/high`), `assignee_id`, `due_at`, `created_at`, `updated_at`;
-   * связи:
-
-     * проект: `project_id → projects.id`;
-     * исполнитель: `assignee_id → users.id`;
-     * привязанные уведомления: `notifications.task_id → tasks.id`.
-
-4. **`notifications`** – уведомления
-
-   * поля: `id`, `project_id`, `user_id`, `task_id`, `calendar_event_id`, `title`, `message`, `position`, `is_approved`, `created_at`;
-   * связи:
-
-     * проект: `project_id → projects.id`;
-     * пользователь (получатель): `user_id → users.id` (может быть `NULL`);
-     * задача: `task_id → tasks.id` (может быть `NULL`);
-     * событие календаря: `calendar_event_id → project_calendar.id` (может быть `NULL`).
-
-5. **`project_calendar`** – календарь созвонов и встреч
-
-   * поля: `id`, `project_id`, `role` (`owner/member/all`), `title`, `description`, `meeting_link`, `event_at`, `created_at`;
-   * связи:
-
-     * проект: `project_id → projects.id`;
-     * по событиям календаря могут создаваться уведомления: `notifications.calendar_event_id → project_calendar.id`.
-
-Такое разделение позволяет:
-
-* явно хранить пользователей, проекты, задачи и события календаря,
-* строить уведомления, привязанные к конкретному проекту / задаче / событию,
-* легко расширять бизнес-логику (роли, статусы, кэш, уведомления) без ломки схемы.
+**Ключевые таблицы:**
+1.  **`users`**: пользователи системы.
+2.  **`projects`**: проекты (связь с создателем).
+3.  **`tasks`**: задачи внутри проектов (связь с `projects` и исполнителем из `users`).
+4.  **`events` / `project_calendar`**: встречи и дедлайны.
+5.  **`notifications`**: система оповещений (связь с юзером, проектом или задачей).
 
