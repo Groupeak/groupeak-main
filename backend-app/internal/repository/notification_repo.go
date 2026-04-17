@@ -11,7 +11,6 @@ type NotificationRepository interface {
 	GetUserNotifications(ctx context.Context, db DBTX, userID int64, limit, offset int) ([]models.Notification, error)
 	MarkAsRead(ctx context.Context, db DBTX, userID int64, notificationIDs []int64) error
 	MarkAllAsRead(ctx context.Context, db DBTX, userID int64) error
-	// Вот этого метода не хватало в интерфейсе!
 	GetUnreadCount(ctx context.Context, db DBTX, userID int64) (int, error)
 }
 

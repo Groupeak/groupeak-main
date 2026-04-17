@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS tasks (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_project_id ON tasks(project_id);
 
--- 4. Связка задач и исполнителей (Многие-ко-многим)
+-- 4. Связка задач и исполнителей
 CREATE TABLE IF NOT EXISTS task_assignees (
     task_id    INT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
     user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

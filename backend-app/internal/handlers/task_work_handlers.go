@@ -7,7 +7,15 @@ import (
 	"groupeak/internal/dto"
 )
 
-// POST /api/v1/projects/{projectID}/tasks/{taskID}/submit
+// SubmitForReview godoc
+// @Summary Отправить задачу на ревью
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param taskID path int true "ID Задачи"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks/{taskID}/submit [post]
 func (h *TaskHandler) SubmitForReview(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -36,7 +44,17 @@ func (h *TaskHandler) SubmitForReview(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"status": "ok"})
 }
 
-// POST /api/v1/projects/{projectID}/tasks/{taskID}/review
+// ReviewTask godoc
+// @Summary Проверить задачу (аппрув или реджект)
+// @Security Bearer
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param taskID path int true "ID Задачи"
+// @Param input body dto.ReviewTaskRequest true "Решение"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks/{taskID}/review [post]
 func (h *TaskHandler) ReviewTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

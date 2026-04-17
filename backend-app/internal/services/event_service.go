@@ -251,7 +251,7 @@ func (s *EventService) DeleteEvent(ctx context.Context, userID, projectID, event
 	if !authorized {
 		return ErrNotEventCreator
 	}
-	
+
 	partsMap, err := s.repo.GetParticipantsForEvents(ctx, s.db, []int{eventID})
 	var targetUserIDs []int
 	if err == nil {

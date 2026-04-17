@@ -29,7 +29,15 @@ var allowedAvatarExts = map[string]string{
 	".heif": "image/heif",
 }
 
-// POST /api/v1/user/avatar
+// UploadAvatar godoc
+// @Summary Загрузка аватара
+// @Security Bearer
+// @Tags user
+// @Accept multipart/form-data
+// @Produce json
+// @Param avatar formData file true "Файл изображения (jpg, png, heic)"
+// @Success 200 {object} map[string]string
+// @Router /user/avatar [post]
 func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -104,7 +112,13 @@ func (h *AuthHandler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DELETE /api/v1/user/avatar
+// DeleteAvatar godoc
+// @Summary Удаление аватара
+// @Security Bearer
+// @Tags user
+// @Produce json
+// @Success 200 {object} map[string]string
+// @Router /user/avatar [delete]
 func (h *AuthHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -147,7 +161,13 @@ func (h *AuthHandler) DeleteAvatar(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/v1/user/get-profile
+// GetProfile godoc
+// @Summary Получение профиля пользователя
+// @Security Bearer
+// @Tags user
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /user/profile [get]
 func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -173,7 +193,15 @@ func (h *AuthHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UpdateProfile — PUT /api/v1/user/profile
+// UpdateProfile godoc
+// @Summary Обновление профиля
+// @Security Bearer
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param input body dto.UpdateProfileRequest true "Данные профиля"
+// @Success 200 {object} map[string]interface{}
+// @Router /user/profile [put]
 func (h *AuthHandler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

@@ -18,7 +18,16 @@ func NewTaskHandler(taskService *services.TaskService) *TaskHandler {
 	return &TaskHandler{taskService: taskService}
 }
 
-// POST /api/v1/projects/{projectID}/tasks
+// CreateTask godoc
+// @Summary Создание задачи
+// @Security Bearer
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param input body dto.CreateTaskRequest true "Данные задачи"
+// @Success 201 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks [post]
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -50,7 +59,15 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /api/v1/projects/{projectID}/tasks/{taskID}
+// GetTaskByID godoc
+// @Summary Получение задачи
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param taskID path int true "ID Задачи"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks/{taskID} [get]
 func (h *TaskHandler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -79,7 +96,17 @@ func (h *TaskHandler) GetTaskByID(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"task": task})
 }
 
-// PATCH /api/v1/projects/{projectID}/tasks/{taskID}
+// UpdateTask godoc
+// @Summary Обновление задачи
+// @Security Bearer
+// @Tags tasks
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param taskID path int true "ID Задачи"
+// @Param input body dto.PatchTaskRequest true "Данные"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks/{taskID} [patch]
 func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -114,7 +141,14 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"task": task})
 }
 
-// DELETE /api/v1/projects/{projectID}/tasks/{taskID}
+// DeleteTask godoc
+// @Summary Удаление задачи
+// @Security Bearer
+// @Tags tasks
+// @Param projectID path int true "ID Проекта"
+// @Param taskID path int true "ID Задачи"
+// @Success 204
+// @Router /projects/{projectID}/tasks/{taskID} [delete]
 func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -143,7 +177,15 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/v1/tasks?project_id=1&priority=high
+// GetFilteredTasks godoc
+// @Summary Глобальная фильтрация задач
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Param project_id query int false "ID Проекта"
+// @Param priority query string false "Приоритет (low, medium, high)"
+// @Success 200 {object} map[string]interface{}
+// @Router /tasks [get]
 func (h *TaskHandler) GetFilteredTasks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -180,7 +222,18 @@ func (h *TaskHandler) GetFilteredTasks(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
 }
 
-// GET  /api/v1/projects/{projectID}/tasks
+// ListTasks godoc
+// @Summary Список задач проекта (с фильтрами)
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param limit query int false "Лимит"
+// @Param offset query int false "Смещение"
+// @Param category query string false "Категория (current, review, inactive)"
+// @Param assignees query string false "ID исполнителей через запятую"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID}/tasks [get]
 func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -232,7 +285,13 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
 }
 
-// GET /api/v1/tasks/nearest
+// GetNearestTasks godoc
+// @Summary Ближайшие задачи (по дедлайну)
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /tasks/nearest [get]
 func (h *TaskHandler) GetNearestTasks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -249,7 +308,13 @@ func (h *TaskHandler) GetNearestTasks(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
 }
 
-// GET /api/v1/tasks/my
+// GetMyTasks godoc
+// @Summary Мои задачи
+// @Security Bearer
+// @Tags tasks
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /tasks/my [get]
 func (h *TaskHandler) GetMyTasks(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

@@ -13,7 +13,7 @@ ALTER TABLE notifications
     -- actor_id: ID пользователя, который совершил действие. 
     ADD COLUMN actor_id INT REFERENCES users(id) ON DELETE SET NULL,
     
-    -- entity_id: ID сущности, с которой произошло действие (ID задачи, ID проекта и т.д.).
+    -- entity_id: ID сущности, с которой произошло действие
     ADD COLUMN entity_id INT,
     
     -- payload: сырые данные в формате JSONB

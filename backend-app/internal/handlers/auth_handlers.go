@@ -25,7 +25,15 @@ func NewAuthHandler(authService *services.AuthService, minioClient *minio.Client
 	}
 }
 
-// Register — HTTP-эндпоинт регистрации
+// Register godoc
+// @Summary Регистрация пользователя
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param input body dto.RegisterRequest true "Данные регистрации"
+// @Success 201 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string "Неверный формат запроса"
+// @Router /auth/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	var req dto.RegisterRequest
 
@@ -43,7 +51,15 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusCreated, resp)
 }
 
-// Login — HTTP-эндпоинт авторизации
+// Login godoc
+// @Summary Авторизация пользователя
+// @Tags auth
+// @Accept json
+// @Produce json
+// @Param input body dto.LoginRequest true "Учетные данные"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string "Неверные данные"
+// @Router /auth/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	var req dto.LoginRequest
 	if err := DecodeJSON(w, r, &req); err != nil {
@@ -65,7 +81,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, resp)
 }
 
-// ChangePassword — POST /api/v1/user/change-password
+// ChangePassword godoc
+// @Summary Смена пароля
+// @Security Bearer
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param input body dto.ChangePasswordRequest true "Данные для смены пароля"
+// @Success 200 {object} map[string]interface{}
+// @Router /user/change-password [post]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -88,7 +112,15 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, resp)
 }
 
-// ChangeEmail — POST /api/v1/user/change-email
+// ChangeEmail godoc
+// @Summary Смена email
+// @Security Bearer
+// @Tags user
+// @Accept json
+// @Produce json
+// @Param input body dto.ChangeEmailRequest true "Данные для смены email"
+// @Success 200 {object} map[string]interface{}
+// @Router /user/change-email [post]
 func (h *AuthHandler) ChangeEmail(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

@@ -12,12 +12,19 @@ type NotificationHandler struct {
 	service *services.NotificationService
 }
 
-// Конструктор
 func NewNotificationHandler(s *services.NotificationService) *NotificationHandler {
 	return &NotificationHandler{service: s}
 }
 
-// GET /api/v1/notifications
+// GetNotifications godoc
+// @Summary Список уведомлений
+// @Security Bearer
+// @Tags notifications
+// @Produce json
+// @Param limit query int false "Лимит"
+// @Param offset query int false "Отступ"
+// @Success 200 {object} map[string]interface{}
+// @Router /notifications [get]
 func (h *NotificationHandler) GetNotifications(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -25,16 +32,14 @@ func (h *NotificationHandler) GetNotifications(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// Пагинация: лимит
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	if limit <= 0 || limit > 100 {
-		limit = 50 // Дефолтное значение или защита от слишком большого лимита
+		limit = 50
 	}
 
-	// Пагинация: оффсет
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	if offset < 0 {
-		offset = 0 // Защита от отрицательного смещения (чтобы PostgreSQL не падал)
+		offset = 0
 	}
 
 	notifs, err := h.service.GetMyNotifications(r.Context(), userID, limit, offset)
@@ -46,7 +51,13 @@ func (h *NotificationHandler) GetNotifications(w http.ResponseWriter, r *http.Re
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"notifications": notifs})
 }
 
-// GET /api/v1/notifications/unread-count
+// GetUnreadCount godoc
+// @Summary Количество непрочитанных уведомлений
+// @Security Bearer
+// @Tags notifications
+// @Produce json
+// @Success 200 {object} map[string]int
+// @Router /notifications/unread-count [get]
 func (h *NotificationHandler) GetUnreadCount(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -63,7 +74,15 @@ func (h *NotificationHandler) GetUnreadCount(w http.ResponseWriter, r *http.Requ
 	_ = WriteJSON(w, http.StatusOK, map[string]int{"unread_count": count})
 }
 
-// PATCH /api/v1/notifications/read
+// MarkRead godoc
+// @Summary Отметить как прочитанные
+// @Security Bearer
+// @Tags notifications
+// @Accept json
+// @Produce json
+// @Param input body dto.ReadNotificationRequest true "Массив ID (пусто для всех)"
+// @Success 200 {object} map[string]string
+// @Router /notifications/read [patch]
 func (h *NotificationHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -78,7 +97,6 @@ func (h *NotificationHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var errService error
-	// Если передали IDшники - читаем только их. Если массив пустой - читаем всё.
 	if len(req.NotificationIDs) > 0 {
 		errService = h.service.MarkAsRead(r.Context(), userID, req.NotificationIDs)
 	} else {

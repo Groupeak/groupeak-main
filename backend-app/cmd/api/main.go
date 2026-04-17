@@ -24,6 +24,16 @@ import (
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
 
+// @title Groupeak API
+// @version 1.0
+// @description REST API бэкенда для мобильного приложения Groupeak (управление проектами и задачами).
+// @host localhost:3030
+// @BasePath /api/v1
+//
+// @securityDefinitions.apikey Bearer
+// @in header
+// @name Authorization
+// @description Введи токен в формате: Bearer {твой_jwt_токен}
 func main() {
 	// Загружаем переменные окружения
 	if err := godotenv.Load(); err != nil {
@@ -72,7 +82,6 @@ func main() {
 	// Контекст для фоновых задач (Bus и Workers)
 	appCtx, cancel := context.WithCancel(context.Background())
 
-	// ВАЖНО: defer выполняется снизу вверх!
 	defer bus.Stop() // 2. Подождет завершения воркеров
 	defer cancel()   // 1. Моментально пошлет сигнал выключения всем фоновым задачам
 

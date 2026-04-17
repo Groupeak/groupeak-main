@@ -306,7 +306,7 @@ func (s *ProjectService) RemoveMember(ctx context.Context, requesterID, projectI
 	s.bus.Publish(eventbus.SystemEvent{
 		Type:      models.EventTypeProjectKicked,
 		ProjectID: projectID,
-		ActorID:   requesterID, 
+		ActorID:   requesterID,
 		EntityID:  targetUserID,
 		Payload: map[string]interface{}{
 			"target_user_id": targetUserID,

@@ -6,12 +6,15 @@ import (
 	"groupeak/internal/handlers"
 	"groupeak/internal/middleware"
 
+	_ "groupeak/docs"
+
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
-// NewRouter собирает HTTP-маршруты. Добавили notificationHandler в параметры!
+// NewRouter собирает HTTP-маршруты приложения, подключает middleware и возвращает готовый обработчик для сервера
 func NewRouter(
 	authHandler *handlers.AuthHandler,
 	projectHandler *handlers.ProjectHandler,
@@ -34,6 +37,8 @@ func NewRouter(
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
+
+	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {

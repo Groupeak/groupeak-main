@@ -117,8 +117,6 @@ func (s *ProjectService) AcceptInvite(ctx context.Context, userID int64, token s
 
 	s.logger.Info("invite accepted", slog.Int64("user_id", userID), slog.Int64("project_id", invite.ProjectID))
 
-	// Узнаем владельца проекта, чтобы назначить его ActorID.
-	// Так юзер получит уведомление (ведь мы не шлем уведомления самому себе).
 	ownerID, _ := s.repo.GetProjectOwnerID(ctx, s.db, invite.ProjectID)
 
 	// Отправляем событие о том, что юзер присоединился к проекту

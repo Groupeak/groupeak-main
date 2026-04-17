@@ -7,7 +7,6 @@ ALTER TABLE notifications
     DROP COLUMN IF EXISTS is_approved,
     DROP COLUMN IF EXISTS task_id,
     
-    -- Добавили IF NOT EXISTS везде ниже:
     ADD COLUMN IF NOT EXISTS type VARCHAR(50) NOT NULL DEFAULT 'unknown',
     ADD COLUMN IF NOT EXISTS actor_id BIGINT REFERENCES users(id) ON DELETE SET NULL,
     ADD COLUMN IF NOT EXISTS entity_id BIGINT,
@@ -31,7 +30,6 @@ CREATE INDEX IF NOT EXISTS idx_notifications_is_read ON notifications(is_read);
 
 
 -- +goose Down
--- Откатываем изменения назад, если что-то пойдет не так
 DROP INDEX IF EXISTS idx_notifications_type;
 DROP INDEX IF EXISTS idx_notifications_is_read;
 

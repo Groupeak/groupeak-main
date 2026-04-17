@@ -15,7 +15,16 @@ func NewEventHandler(s *services.EventService) *EventHandler {
 	return &EventHandler{service: s}
 }
 
-// POST /api/v1/projects/{projectID}/events
+// CreateEvent godoc
+// @Summary Создать событие/встречу
+// @Security Bearer
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param input body dto.CreateEventRequest true "Данные события"
+// @Success 201 {object} map[string]interface{}
+// @Router /projects/{projectID}/events [post]
 func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -44,7 +53,17 @@ func (h *EventHandler) CreateEvent(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusCreated, event)
 }
 
-// PATCH /api/v1/projects/{projectID}/events/{eventID}
+// UpdateEvent godoc
+// @Summary Обновить событие
+// @Security Bearer
+// @Tags events
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param eventID path int true "ID События"
+// @Param input body dto.UpdateEventRequest true "Обновляемые поля"
+// @Success 200 {object} map[string]string
+// @Router /projects/{projectID}/events/{eventID} [patch]
 func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -79,7 +98,14 @@ func (h *EventHandler) UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
-// DELETE /api/v1/projects/{projectID}/events/{eventID}
+// DeleteEvent godoc
+// @Summary Удалить событие
+// @Security Bearer
+// @Tags events
+// @Param projectID path int true "ID Проекта"
+// @Param eventID path int true "ID События"
+// @Success 200 {object} map[string]string
+// @Router /projects/{projectID}/events/{eventID} [delete]1
 func (h *EventHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -108,7 +134,13 @@ func (h *EventHandler) DeleteEvent(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]string{"status": "success"})
 }
 
-// GET /api/v1/events/my
+// GetUserEvents godoc
+// @Summary Мои события
+// @Security Bearer
+// @Tags events
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /events/my [get]
 func (h *EventHandler) GetUserEvents(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {

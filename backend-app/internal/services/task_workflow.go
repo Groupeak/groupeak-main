@@ -156,7 +156,6 @@ func (s *TaskService) ReviewTask(ctx context.Context, ownerID, projectID, taskID
 		}
 		s.logger.Info("task rejected", slog.Int64("task_id", taskID))
 
-		// Собираем payload для reject
 		payload := map[string]interface{}{
 			"decision":   "reject",
 			"new_due_at": newDueAt,

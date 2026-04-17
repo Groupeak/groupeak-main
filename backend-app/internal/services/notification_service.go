@@ -57,7 +57,7 @@ func (s *NotificationService) HandleEvent(ctx context.Context, e eventbus.System
 		}
 
 	case models.EventTypeEventDeleted, models.EventTypeProjectUpdated,
-		models.EventTypeProjectDeleted, models.EventTypeTaskDeleted: 
+		models.EventTypeProjectDeleted, models.EventTypeTaskDeleted:
 		if pIDs, ok := e.Payload["target_user_ids"].([]int64); ok {
 			targetUserIDs = pIDs
 		} else if pIDsInt, ok := e.Payload["target_user_ids"].([]int); ok {

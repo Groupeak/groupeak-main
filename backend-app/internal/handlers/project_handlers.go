@@ -29,7 +29,15 @@ func parseProjectID(r *http.Request) (int64, bool) {
 	return projectID, true
 }
 
-// POST /api/v1/projects
+// CreateProject godoc
+// @Summary Создание проекта
+// @Security Bearer
+// @Tags projects
+// @Accept json
+// @Produce json
+// @Param input body dto.CreateProjectRequest true "Данные проекта"
+// @Success 201 {object} map[string]interface{}
+// @Router /projects [post]
 func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -52,7 +60,13 @@ func (h *ProjectHandler) CreateProject(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusCreated, map[string]interface{}{"project": project})
 }
 
-// GET /api/v1/projects
+// ListProjects godoc
+// @Summary Список проектов пользователя
+// @Security Bearer
+// @Tags projects
+// @Produce json
+// @Success 200 {object} map[string]interface{}
+// @Router /projects [get]
 func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -69,7 +83,16 @@ func (h *ProjectHandler) ListProjects(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"projects": projects})
 }
 
-// PATCH /api/v1/projects/{projectID}
+// UpdateProject godoc
+// @Summary Обновление проекта
+// @Security Bearer
+// @Tags projects
+// @Accept json
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Param input body dto.PatchProjectRequest true "Обновляемые поля"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID} [patch]
 func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -98,7 +121,13 @@ func (h *ProjectHandler) UpdateProject(w http.ResponseWriter, r *http.Request) {
 	_ = WriteJSON(w, http.StatusOK, map[string]interface{}{"project": project})
 }
 
-// DELETE /api/v1/projects/{projectID}
+// DeleteProject godoc
+// @Summary Удаление проекта
+// @Security Bearer
+// @Tags projects
+// @Param projectID path int true "ID Проекта"
+// @Success 204
+// @Router /projects/{projectID} [delete]
 func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
@@ -121,7 +150,14 @@ func (h *ProjectHandler) DeleteProject(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// GET /api/v1/projects/{projectID}
+// GetProject godoc
+// @Summary Получение проекта по ID
+// @Security Bearer
+// @Tags projects
+// @Produce json
+// @Param projectID path int true "ID Проекта"
+// @Success 200 {object} map[string]interface{}
+// @Router /projects/{projectID} [get]
 func (h *ProjectHandler) GetProject(w http.ResponseWriter, r *http.Request) {
 	userID, ok := GetUserIDFromContext(r.Context())
 	if !ok {
