@@ -71,6 +71,7 @@ dependencies {
     implementation("com.google.code.gson:gson:2.13.2")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.room.ktx)
+    implementation(libs.androidx.ui)
 
     testImplementation(libs.junit)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")

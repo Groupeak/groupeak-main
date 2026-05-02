@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -14,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -27,6 +25,10 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.theme.*
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.text.withStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.SpanStyle
 
 @Composable
 fun EventsScreen(
@@ -45,7 +47,7 @@ fun EventsScreen(
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 55.dp, bottom = 23.dp)
+                    .padding(top = 55.dp, bottom = 12.dp)
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_back_arrow),
@@ -105,11 +107,11 @@ fun EventsScreen(
                     )
                 }
             } else {
+                // Список мероприятий
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 15.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                        .padding(horizontal = 15.dp)
                 ) {
                     val groupedEvents = uiState.events.groupBy { it.date }
 
@@ -121,18 +123,26 @@ fun EventsScreen(
                                 fontFamily = OnestFontFamily,
                                 fontWeight = FontWeight.SemiBold,
                                 color = Color.Black,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                modifier = Modifier.padding(top = 8.dp, start = 13.dp, bottom = 7.dp)
                             )
                         }
 
-                        items(events) { event ->
+                        itemsIndexed(events) { index, event ->
                             EventCard(
                                 event = event,
                                 onClick = { onEventClick(event) }
                             )
+
+                            Spacer(
+                                Modifier.height(
+                                    if (index == events.lastIndex) 33.dp
+                                    else 16.dp
+                                )
+                            )
                         }
                     }
 
+                    // Отступ снизу для нижней панели
                     item {
                         Spacer(Modifier.height(80.dp))
                     }
@@ -211,7 +221,7 @@ private fun EventCard(
             }
 
             Icon(
-                painter = painterResource(id = R.drawable.ic_right_arrow),
+                painter = painterResource(id = R.drawable.ic_event_arrow),
                 contentDescription = "Открыть",
                 tint = Color(0xFF3988FE),
                 modifier = Modifier.size(24.dp)
@@ -226,9 +236,15 @@ private fun EventDetailDialog(
     onDismiss: () -> Unit
 ) {
     var showParticipantsDialog by remember { mutableStateOf(false) }
-    val dialogHeight = if (event.link != null) 632.dp else 572.dp
+    // Высота 632.dp с ссылкой, 545.dp без ссылки
+    val dialogHeight = if (event.link != null) 632.dp else 545.dp
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
         Box(
             modifier = Modifier
                 .width(348.dp)
@@ -243,8 +259,7 @@ private fun EventDetailDialog(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 20.dp, vertical = 16.dp)
+                        .padding(horizontal = 10.dp, vertical = 16.dp)
                 ) {
                     EventDetailField(
                         label = "Название",
@@ -338,11 +353,21 @@ private fun ParticipantsField(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val displayText = when {
-        participants.isEmpty() -> "Нет участников"
-        participants.size == 1 -> participants[0].name
-        participants.size == 2 -> "${participants[0].name}, ${participants[1].name}"
-        else -> "${participants[0].name}, ${participants[1].name} и еще ${participants.size - 2}"
+    // Умное формирование текста с "и еще n"
+    val displayText = buildAnnotatedString {
+        if (participants.isEmpty()) {
+            append("Нет участников")
+        } else if (participants.size == 1) {
+            append(participants[0].name)
+        } else if (participants.size == 2) {
+            append("${participants[0].name}, ${participants[1].name}")
+        } else {
+            // Показываем первые 2 имени + "и еще n" полужирным
+            append("${participants[0].name}, ${participants[1].name} ")
+            withStyle(style = SpanStyle(fontWeight = FontWeight.SemiBold)) {
+                append("и еще ${participants.size - 2}")
+            }
+        }
     }
 
     Column(modifier = modifier.fillMaxWidth()) {
@@ -383,10 +408,9 @@ private fun ParticipantsField(
                 overflow = TextOverflow.Ellipsis,
                 modifier = Modifier.weight(1f)
             )
-            // ✅ Добавлен отступ между текстом и стрелкой
             Spacer(Modifier.width(8.dp))
             Icon(
-                painter = painterResource(id = R.drawable.ic_right_arrow),
+                painter = painterResource(id = R.drawable.ic_down_arrow),
                 contentDescription = "Открыть список",
                 tint = BluePrimary300,
                 modifier = Modifier.size(20.dp)
@@ -400,7 +424,12 @@ private fun ParticipantsDialog(
     participants: List<Participant>,
     onDismiss: () -> Unit
 ) {
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false
+        )
+    ) {
         Box(
             modifier = Modifier
                 .width(348.dp)
@@ -429,19 +458,20 @@ private fun ParticipantsDialog(
                             .align(Alignment.CenterHorizontally)
                     )
 
-                    LazyColumn(
+
+                    Column(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(405.dp)
+                            .verticalScroll(rememberScrollState())
                     ) {
-                        itemsIndexed(participants) { index, participant ->
+                        participants.forEachIndexed { index, participant ->
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(vertical = 16.dp), // Отступ между строками
+                                    .padding(vertical = 23.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                // Имя (фиксированная ширина, чтобы не сжималось)
                                 Text(
                                     text = participant.name,
                                     fontSize = 20.sp,
@@ -449,11 +479,10 @@ private fun ParticipantsDialog(
                                     fontWeight = FontWeight.Normal,
                                     color = GroupeakDarkBlue,
                                     modifier = Modifier
-                                        .width(140.dp) // Увеличил ширину, чтобы длинные имена не ломали строку
+                                        .width(140.dp)
                                         .padding(start = 9.dp)
                                 )
 
-                                // Роль (занимает всё оставшееся место и прижимается вправо)
                                 if (participant.role.isNotEmpty()) {
                                     Text(
                                         text = participant.role,
@@ -461,13 +490,12 @@ private fun ParticipantsDialog(
                                         fontFamily = OnestFontFamily,
                                         color = Gray650,
                                         modifier = Modifier
-                                            .weight(1f) // Растягивается, отталкивая текст вправо
-                                            .wrapContentWidth(Alignment.CenterHorizontally) // Выравнивание по правому краю
+                                            .weight(1f)
+                                            .wrapContentWidth(Alignment.CenterHorizontally)
                                     )
                                 }
                             }
 
-                            // Разделитель
                             if (index != participants.lastIndex) {
                                 Box(
                                     modifier = Modifier
@@ -478,7 +506,6 @@ private fun ParticipantsDialog(
                             }
                         }
                     }
-                    //Spacer(Modifier.height(23.dp))
                 }
             }
         }

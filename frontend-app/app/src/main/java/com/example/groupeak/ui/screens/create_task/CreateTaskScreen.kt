@@ -47,6 +47,7 @@ import com.example.groupeak.R
 import com.example.groupeak.ui.components.GroupeakBackground
 import com.example.groupeak.ui.components.PrimaryButton
 import com.example.groupeak.ui.theme.*
+import androidx.compose.ui.window.DialogProperties
 
 private object DateVisualTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
@@ -388,7 +389,13 @@ fun CreateTaskScreen(
         }
 
         if (showProjectDialog) {
-            Dialog(onDismissRequest = { showProjectDialog = false }) {
+            Dialog(
+                onDismissRequest = { showProjectDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnClickOutside = true
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .width(348.dp)
@@ -403,7 +410,7 @@ fun CreateTaskScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = 10.dp)
                         ) {
                             Spacer(Modifier.height(16.dp))
 
@@ -510,7 +517,13 @@ fun CreateTaskScreen(
         }
 
         if (showParticipantsDialog) {
-            Dialog(onDismissRequest = { showParticipantsDialog = false }) {
+            Dialog(
+                onDismissRequest = { showProjectDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnClickOutside = true
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .width(348.dp)
@@ -525,7 +538,7 @@ fun CreateTaskScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = 10.dp)
                         ) {
                             Spacer(Modifier.height(16.dp))
 
@@ -746,15 +759,37 @@ private fun InputFieldWithError(
 
 private fun formatParticipantsText(participants: String, placeholder: String): AnnotatedString {
     val list = participants.split(", ").filter { it.isNotBlank() }
-    return when {
-        list.isEmpty() -> AnnotatedString(placeholder)
-        list.size == 1 -> AnnotatedString(list[0])
-        list.size == 2 -> AnnotatedString("${list[0]}, ${list[1]}")
-        else -> {
-            buildAnnotatedString {
-                append("${list[0]}, ${list[1]} ")
-                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append("и еще ${list.size - 2}")
+
+    return buildAnnotatedString {
+        if (list.isEmpty()) {
+            append(placeholder)
+        } else {
+            var currentLength = 0
+            val maxLength = 30 // Максимальная длина для комфортного отображения
+
+            list.forEachIndexed { index, name ->
+                val nameWithComma = if (index < list.lastIndex)
+                    "$name, "
+                else
+                    name
+
+                // Проверяем, поместится ли это имя
+                if (currentLength + nameWithComma.length <= maxLength) {
+                    append(name)
+                    if (index < list.lastIndex) {
+                        append(", ")
+                    }
+                    currentLength += nameWithComma.length
+                } else {
+                    // Не помещается — добавляем "и еще n" полужирным
+                    val remaining = list.size - index
+                    if (index > 0) {
+                        append(" ")
+                    }
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.Medium)) { // ✅ Полужирный
+                        append("и еще $remaining")
+                    }
+                    return@forEachIndexed
                 }
             }
         }

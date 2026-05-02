@@ -253,20 +253,64 @@ private fun LabeledPasswordField(
 }
 
 @Composable
-private fun CommonHeader(title: String, onBackClick: () -> Unit, onNotificationsClick: () -> Unit) {
-    Box(modifier = Modifier.fillMaxWidth().padding(top = 55.dp, bottom = 32.dp)) {
+private fun CommonHeader(
+    title: String,
+    hasNotifications: Boolean = false,
+    onBackClick: () -> Unit,
+    onNotificationsClick: () -> Unit
+) {
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(top = 55.dp, bottom = 32.dp)
+    ) {
         Icon(
-            painter = painterResource(R.drawable.ic_back_arrow),
-            contentDescription = null,
+            painter = painterResource(id = R.drawable.ic_back_arrow),
+            contentDescription = "Назад",
             tint = BluePrimary300,
-            modifier = Modifier.align(Alignment.CenterStart).padding(start = 8.dp).size(28.dp).clickable { onBackClick() }
+            modifier = Modifier
+                .align(Alignment.CenterStart)
+                .padding(start = 8.dp)
+                .size(28.dp)
+                .clickable { onBackClick() }
         )
-        Text(title, fontSize = 32.sp, fontFamily = OnestFontFamily, color = BluePrimary300, textAlign = TextAlign.Center, modifier = Modifier.align(Alignment.Center))
-        Icon(
-            painter = painterResource(R.drawable.ic_notif),
-            contentDescription = null,
-            tint = BluePrimary300,
-            modifier = Modifier.align(Alignment.CenterEnd).padding(end = 19.dp).size(22.dp).clickable { onNotificationsClick() }
+
+        Text(
+            text = title,
+            fontSize = 32.sp,
+            fontFamily = OnestFontFamily,
+            fontWeight = FontWeight.Normal,
+            color = BluePrimary300,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .align(Alignment.Center)
+                .fillMaxWidth()
         )
+
+        Box(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 19.dp)
+                .size(28.dp)
+                .clickable { onNotificationsClick() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                painter = painterResource(id = R.drawable.ic_notif),
+                contentDescription = "Уведомления",
+                tint = BluePrimary300,
+                modifier = Modifier.size(22.dp)
+            )
+
+            if (hasNotifications) {
+                Box(
+                    modifier = Modifier
+                        .size(8.dp)
+                        .align(Alignment.TopEnd)
+                        .offset(x = (-3).dp, y = 2.dp)
+                        .background(Color.Red, RoundedCornerShape(50))
+                )
+            }
+        }
     }
 }

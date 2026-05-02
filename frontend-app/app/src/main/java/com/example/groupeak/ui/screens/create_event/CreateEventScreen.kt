@@ -38,6 +38,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.window.DialogProperties
 
 // VisualTransformation для даты (ДД.ММ.ГГГГ)
 private object DateVisualTransformation : VisualTransformation {
@@ -106,15 +107,37 @@ private object TimeVisualTransformation : VisualTransformation {
 // Форматирование участников
 private fun formatParticipantsText(participants: String, placeholder: String): AnnotatedString {
     val list = participants.split(", ").filter { it.isNotBlank() }
-    return when {
-        list.isEmpty() -> AnnotatedString(placeholder)
-        list.size == 1 -> AnnotatedString(list[0])
-        list.size == 2 -> AnnotatedString("${list[0]}, ${list[1]}")
-        else -> {
-            buildAnnotatedString {
-                append("${list[0]}, ${list[1]} ")
-                withStyle(style = SpanStyle(fontWeight = FontWeight.Bold)) {
-                    append("и еще ${list.size - 2}")
+
+    return buildAnnotatedString {
+        if (list.isEmpty()) {
+            append(placeholder)
+        } else {
+            var currentLength = 0
+            val maxLength = 30 // Примерная максимальная длина для комфортного отображения
+
+            list.forEachIndexed { index, name ->
+                val nameWithComma = if (index < list.lastIndex)
+                    "$name, "
+                else
+                    name
+
+                // Проверяем, поместится ли это имя
+                if (currentLength + nameWithComma.length <= maxLength) {
+                    append(name)
+                    if (index < list.lastIndex) {
+                        append(", ")
+                    }
+                    currentLength += nameWithComma.length
+                } else {
+                    // Не помещается — добавляем "и еще n" полужирным
+                    val remaining = list.size - index
+                    if (index > 0) {
+                        append(" ")
+                    }
+                    withStyle(style = SpanStyle(fontWeight = FontWeight.Medium)) {
+                        append("и еще $remaining")
+                    }
+                    return@forEachIndexed
                 }
             }
         }
@@ -375,7 +398,13 @@ fun CreateEventScreen(
 
         // Диалог выбора проекта
         if (showProjectDialog) {
-            Dialog(onDismissRequest = { showProjectDialog = false }) {
+            Dialog(
+                onDismissRequest = { showProjectDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnClickOutside = true
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .width(348.dp)
@@ -392,7 +421,7 @@ fun CreateEventScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = 10.dp)
                         ) {
                             Spacer(Modifier.height(16.dp))
 
@@ -469,7 +498,13 @@ fun CreateEventScreen(
 
         // Диалог выбора участников
         if (showParticipantsDialog) {
-            Dialog(onDismissRequest = { showParticipantsDialog = false }) {
+            Dialog(
+                onDismissRequest = { showProjectDialog = false },
+                properties = DialogProperties(
+                    usePlatformDefaultWidth = false,
+                    dismissOnClickOutside = true
+                )
+            ) {
                 Box(
                     modifier = Modifier
                         .width(348.dp)
@@ -486,7 +521,7 @@ fun CreateEventScreen(
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 20.dp)
+                                .padding(horizontal = 10.dp)
                         ) {
                             Spacer(Modifier.height(16.dp))
 
