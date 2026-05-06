@@ -72,6 +72,9 @@ dependencies {
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation(libs.androidx.room.ktx)
     implementation(libs.androidx.ui)
+    implementation(libs.androidx.compose.animation)
+    implementation(libs.androidx.compose.foundation.layout)
+    implementation(libs.androidx.compose.foundation)
 
     testImplementation(libs.junit)
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")

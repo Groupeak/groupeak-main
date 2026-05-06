@@ -43,16 +43,18 @@ class LoginViewModel(
     }
 
     fun onLoginClick(onSuccess: () -> Unit) {
-//        if (BuildConfig.DEV_BYPASS_AUTH) {
-//            uiState = uiState.copy(
-//                isLoading = false,
-//                errorMessage = null,
-//                emailError = null,
-//                passwordError = null
-//            )
-//            onSuccess()
-//            return
-//        }
+        if (BuildConfig.DEV_BYPASS_AUTH) {
+            uiState = uiState.copy(
+                isLoading = false,
+                errorMessage = null,
+                emailError = null,
+                passwordError = null
+            )
+            onSuccess()
+            return
+        }
+
+
 
         val current = uiState
 

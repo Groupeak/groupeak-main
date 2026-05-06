@@ -39,6 +39,10 @@ import com.example.groupeak.ui.screens.profile.ProfileViewModel
 import com.example.groupeak.ui.screens.project.ProjectScreen
 import com.example.groupeak.ui.screens.project.ProjectTab
 import com.example.groupeak.ui.screens.project.mockProjectUiState
+import com.example.groupeak.ui.screens.project_for_owner.ProjectForOwnerScreen
+import com.example.groupeak.ui.screens.project_for_owner.ProjectOwnerTab
+import com.example.groupeak.ui.screens.project_for_owner.mockProjectForOwnerUiState
+
 import com.example.groupeak.ui.screens.tasks.TasksScreen
 import com.example.groupeak.ui.screens.tasks.TasksViewModel
 import com.example.groupeak.ui.screens.tasks.TasksViewModelFactory
@@ -269,7 +273,8 @@ fun MainNavGraph(
             )
         }
 
-        composable(
+
+        /*composable(
             route = Screen.ProjectTasks.route,
             arguments = listOf(
                 navArgument("projectId") { type = NavType.LongType },
@@ -307,6 +312,53 @@ fun MainNavGraph(
                 onTaskClick = { },
                 onMemberClick = { },
                 onInviteMemberClick = { },
+            )
+        }*/
+
+        composable(
+            route = Screen.ProjectTasks.route,
+            arguments = listOf(
+                navArgument("projectId") { type = NavType.LongType },
+                navArgument("isOwner") {
+                    type = NavType.BoolType
+                    defaultValue = false
+                },
+            ),
+        ) { backStackEntry ->
+            val projectId = backStackEntry.arguments?.getLong("projectId")
+                ?: return@composable
+
+            val isOwner = backStackEntry.arguments?.getBoolean("isOwner") ?: false
+
+            val baseState = remember(projectId, isOwner) {
+                mockProjectForOwnerUiState(
+                    projectId = projectId,
+                )
+            }
+
+            var selectedTab by rememberSaveable(projectId) {
+                mutableStateOf(ProjectOwnerTab.TASKS)
+            }
+
+            val uiState = baseState.copy(selectedTab = selectedTab)
+
+            ProjectForOwnerScreen(
+                uiState = uiState,
+                onBack = { navController.popBackStack() },
+                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                onTabSelected = { selectedTab = it },
+                onInfoClick = { },
+                onFilterClick = { },
+                onTaskClick = { },
+                onMemberClick = { },
+                onInviteMemberClick = { },
+                onDeleteTask = { },
+                onDeleteMember = { },
+                onUpdateTaskDate = { _, _ -> },
+                onInviteEmailChange = { },
+                onInvitePositionChange = { },
+                onSendInvite = { },
+                onNewDateChange = { },
             )
         }
 

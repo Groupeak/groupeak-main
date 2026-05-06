@@ -52,7 +52,7 @@ fun RootNavGraph(
     val currentRoute = navBackStackEntry?.destination?.route
 
     LaunchedEffect(token, currentRoute) {
-        if (token.isNullOrBlank() && currentRoute == Graph.MAIN) {
+        if (!BuildConfig.DEV_BYPASS_AUTH && token.isNullOrBlank() && currentRoute == Graph.MAIN) {
             rootNavController.navigate(Graph.AUTH) {
                 popUpTo(rootNavController.graph.id) { inclusive = true }
                 launchSingleTop = true
