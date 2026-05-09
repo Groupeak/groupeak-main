@@ -692,6 +692,7 @@ private fun InputFieldWithError(
             fontFamily = OnestFontFamily,
             fontWeight = FontWeight.Normal,
             color = if (error != null) Color.Red else BluePrimary300,
+            letterSpacing = (-0.4).sp,
             modifier = Modifier.padding(start = 11.dp),
             style = TextStyle(
                 lineHeight = 16.sp,
@@ -733,6 +734,7 @@ private fun InputFieldWithError(
                     fontSize = 14.sp,
                     fontFamily = OnestFontFamily,
                     color = GroupeakDarkBlue,
+                    letterSpacing = (-0.4).sp,
                     lineHeight = 16.sp,
                     lineHeightStyle = LineHeightStyle(
                         alignment = LineHeightStyle.Alignment.Center,
@@ -747,7 +749,8 @@ private fun InputFieldWithError(
                             text = placeholder,
                             fontSize = 14.sp,
                             fontFamily = OnestFontFamily,
-                            color = Gray650
+                            color = Gray650,
+                            letterSpacing = (-0.4).sp
                         )
                     }
                     inner()

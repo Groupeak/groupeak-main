@@ -81,13 +81,13 @@ import java.time.format.DateTimeFormatter
 private enum class TaskBucket { CURRENT, REVIEW, INACTIVE }
 
 private enum class TaskPriority(val title: String, val color: Color) {
-    HIGH("Высокий приоритет", Color(0xFFFF2B2B)),
-    MEDIUM("Средний приоритет", Color(0xFFD0C000)),
-    LOW("Низкий приоритет", Color(0xFF1BCB41))
+    HIGH("Высокий приоритет", Color(0xFFFF1E1E)),
+    MEDIUM("Средний приоритет", Color(0xFFD6C100)),
+    LOW("Низкий приоритет", Color(0xFF26BC30))
 }
 
 private enum class InactiveStatus(val title: String, val color: Color) {
-    DONE("Выполнено", Color(0xFF32CD32)),
+    DONE("Выполнено", Color(0xFF26BC30)),
     OVERDUE("Просрочено", Color(0xFFFF1E1E))
 }
 
@@ -1049,7 +1049,7 @@ private fun FilterPrioritySelector(
     )
     val animatedColor by animateColorAsState(
         targetValue = when (selectedPriority) {
-            TaskPriority.LOW -> Color(0xFF28C52E)
+            TaskPriority.LOW -> Color(0xFF26BC30)
             TaskPriority.MEDIUM -> Color(0xFFD6C100)
             TaskPriority.HIGH -> Color(0xFFFF1E1E)
             null -> Color.Transparent
@@ -1232,11 +1232,7 @@ private fun TaskRow(
         isReviewTask -> Color(0xFF969696)
         else -> Color.Black
     }
-    val projectColor = when {
-        isInactiveTask -> Color(0xFF70717A)
-        isReviewTask -> Color(0xFF969696)
-        else -> Color.Black
-    }
+    
     val priorityTextColor = when {
         isInactiveTask || isReviewTask -> Color(0xFF70717A)
         else -> task.priority.color
@@ -1275,7 +1271,7 @@ private fun TaskRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 36.dp, end = rowEndPadding),
+                .padding(start = 44.dp, end = rowEndPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
@@ -1295,18 +1291,6 @@ private fun TaskRow(
                     overflow = TextOverflow.Clip
                 )
 
-                Text(
-                    text = "Проект: ${task.project}",
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    letterSpacing = 0.25.sp,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = projectColor,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1321,7 +1305,7 @@ private fun TaskRow(
                         maxLines = 1
                     )
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     Box(
                         modifier = Modifier
@@ -1329,7 +1313,7 @@ private fun TaskRow(
                             .background(Color(0xFFD9D9D9), CircleShape)
                     )
 
-                    Spacer(modifier = Modifier.width(6.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
 
                     Text(
                         text = task.deadline,
@@ -1890,7 +1874,7 @@ private fun TaskPriorityReadOnlySelector(
             TaskPriorityReadOnlyItem(
                 text = "Низкий",
                 selected = priority == TaskPriority.LOW,
-                selectedColor = Color(0xFF28C52E),
+                selectedColor = Color(0xFF26BC30),
                 modifier = Modifier.weight(1f)
             )
 
