@@ -81,13 +81,13 @@ import java.time.format.DateTimeFormatter
 private enum class TaskBucket { CURRENT, REVIEW, INACTIVE }
 
 private enum class TaskPriority(val title: String, val color: Color) {
-    HIGH("Высокий приоритет", Color(0xFFFF1E1E)),
-    MEDIUM("Средний приоритет", Color(0xFFD6C100)),
-    LOW("Низкий приоритет", Color(0xFF26BC30))
+    HIGH("Высокий приоритет", Color(0xFFFF2B2B)),
+    MEDIUM("Средний приоритет", Color(0xFFD0C000)),
+    LOW("Низкий приоритет", Color(0xFF1BCB41))
 }
 
 private enum class InactiveStatus(val title: String, val color: Color) {
-    DONE("Выполнено", Color(0xFF26BC30)),
+    DONE("Выполнено", Color(0xFF32CD32)),
     OVERDUE("Просрочено", Color(0xFFFF1E1E))
 }
 
@@ -359,118 +359,118 @@ fun TasksScreen(
                                 SectionTitle("Текущие", visibleCurrentCount)
                             }
 
-                        if (visibleCurrentCount == 0) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(127.dp),
-                                    contentAlignment = Alignment.Center
+                            if (visibleCurrentCount == 0) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(127.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text = "Нет текущих задач",
+                                            fontSize = 24.sp,
+                                            fontFamily = OnestFontFamily,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF70717A),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(
+                                items = currentTasks,
+                                key = { "current_${it.id}" },
+                            ) { task ->
+                                AnimatedVisibility(
+                                    visible = task.id !in transitioningTaskIds,
+                                    enter = expandVertically(),
+                                    exit = shrinkVertically(
+                                        animationSpec = tween(
+                                            durationMillis = 260,
+                                            easing = FastOutSlowInEasing,
+                                        )
+                                    ) + fadeOut(
+                                        animationSpec = tween(durationMillis = 180)
+                                    ) + slideOutVertically(
+                                        animationSpec = tween(
+                                            durationMillis = 260,
+                                            easing = FastOutSlowInEasing,
+                                        ),
+                                        targetOffsetY = { it / 2 }
+                                    )
                                 ) {
-                                    Text(
-                                        text = "Нет текущих задач",
-                                        fontSize = 24.sp,
-                                        fontFamily = OnestFontFamily,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF70717A),
-                                        textAlign = TextAlign.Center
+                                    TaskRow(
+                                        task = task,
+                                        muted = false,
+                                        rightText = null,
+                                        rightTextColor = Color.Transparent,
+                                        isSubmitting = task.id in transitioningTaskIds || uiState.isSubmittingTaskId == task.id,
+                                        onCheckedChange = {
+                                            if (task.backendStatus == "in_progress" && task.id !in transitioningTaskIds) {
+                                                transitioningTaskIds = transitioningTaskIds + task.id
+
+                                                scope.launch {
+                                                    delay(220)
+                                                    if (task.id in transitioningTaskIds) {
+                                                        optimisticReviewTasks = optimisticReviewTasks + (
+                                                                task.id to task.copy(
+                                                                    bucket = TaskBucket.REVIEW,
+                                                                    backendStatus = "in_review",
+                                                                    checked = true,
+                                                                )
+                                                                )
+                                                    }
+                                                }
+
+                                                onSubmitTask(task.projectId, task.id)
+                                            }
+                                        },
+                                        onClick = { onTaskClick(task.projectId, task.id) },
                                     )
                                 }
                             }
-                        }
 
-                        items(
-                            items = currentTasks,
-                            key = { "current_${it.id}" },
-                        ) { task ->
-                            AnimatedVisibility(
-                                visible = task.id !in transitioningTaskIds,
-                                enter = expandVertically(),
-                                exit = shrinkVertically(
-                                    animationSpec = tween(
-                                        durationMillis = 260,
-                                        easing = FastOutSlowInEasing,
-                                    )
-                                ) + fadeOut(
-                                    animationSpec = tween(durationMillis = 180)
-                                ) + slideOutVertically(
-                                    animationSpec = tween(
-                                        durationMillis = 260,
-                                        easing = FastOutSlowInEasing,
-                                    ),
-                                    targetOffsetY = { it / 2 }
-                                )
-                            ) {
-                                TaskRow(
+                            item {
+                                if (visibleCurrentCount > 0) {
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                }
+                                SectionTitle("На проверке", displayedReviewTasks.size)
+                            }
+
+                            if (displayedReviewTasks.isEmpty()) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(top = 78.dp),
+                                        contentAlignment = Alignment.TopCenter
+                                    ) {
+                                        Text(
+                                            text = "Нет задач на проверке",
+                                            fontSize = 24.sp,
+                                            fontFamily = OnestFontFamily,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color(0xFF70717A),
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+
+                            items(
+                                items = displayedReviewTasks,
+                                key = { "review_${it.id}" },
+                            ) { task ->
+                                ReviewAnimatedTaskRow(
                                     task = task,
-                                    muted = false,
-                                    rightText = null,
-                                    rightTextColor = Color.Transparent,
-                                    isSubmitting = task.id in transitioningTaskIds || uiState.isSubmittingTaskId == task.id,
-                                    onCheckedChange = {
-                                        if (task.backendStatus == "in_progress" && task.id !in transitioningTaskIds) {
-                                            transitioningTaskIds = transitioningTaskIds + task.id
-
-                                            scope.launch {
-                                                delay(220)
-                                                if (task.id in transitioningTaskIds) {
-                                                    optimisticReviewTasks = optimisticReviewTasks + (
-                                                            task.id to task.copy(
-                                                                bucket = TaskBucket.REVIEW,
-                                                                backendStatus = "in_review",
-                                                                checked = true,
-                                                            )
-                                                            )
-                                                }
-                                            }
-
-                                            onSubmitTask(task.projectId, task.id)
-                                        }
-                                    },
+                                    animateEnter = task.id in optimisticReviewTasks.keys || recentlyMovedTaskId == task.id,
+                                    rightText = "В обработке",
+                                    rightTextColor = Color(0xFFD6C100),
                                     onClick = { onTaskClick(task.projectId, task.id) },
                                 )
                             }
-                        }
-
-                        item {
-                            if (visibleCurrentCount > 0) {
-                                Spacer(modifier = Modifier.height(3.dp))
-                            }
-                            SectionTitle("На проверке", displayedReviewTasks.size)
-                        }
-
-                        if (displayedReviewTasks.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(top = 78.dp),
-                                    contentAlignment = Alignment.TopCenter
-                                ) {
-                                    Text(
-                                        text = "Нет задач на проверке",
-                                        fontSize = 24.sp,
-                                        fontFamily = OnestFontFamily,
-                                        fontWeight = FontWeight.Medium,
-                                        color = Color(0xFF70717A),
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-                            }
-                        }
-
-                        items(
-                            items = displayedReviewTasks,
-                            key = { "review_${it.id}" },
-                        ) { task ->
-                            ReviewAnimatedTaskRow(
-                                task = task,
-                                animateEnter = task.id in optimisticReviewTasks.keys || recentlyMovedTaskId == task.id,
-                                rightText = "В обработке",
-                                rightTextColor = Color(0xFFD6C100),
-                                onClick = { onTaskClick(task.projectId, task.id) },
-                            )
-                        }
 
                         }
                     } else {
@@ -777,16 +777,39 @@ private fun TasksFilterDialog(
                     )
                     .clipToBounds()
             ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(top = 17.dp, start = 10.dp, end = 10.dp, bottom = 20.dp)
-            ) {
-                if (allowProjectSelection) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(top = 17.dp, start = 10.dp, end = 10.dp, bottom = 20.dp)
+                ) {
+                    if (allowProjectSelection) {
+                        Text(
+                            text = "Проект",
+                            fontSize = 14.sp,
+                            lineHeight = 18.sp,
+                            fontFamily = OnestFontFamily,
+                            fontWeight = FontWeight.Normal,
+                            color = BluePrimary300,
+                            modifier = Modifier.padding(start = 11.dp)
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        FilterProjectSelector(
+                            availableProjects = availableProjects,
+                            selectedProject = selectedProject,
+                            expanded = projectExpanded,
+                            onExpandedChange = { projectExpanded = it },
+                            onProjectSelected = { selectedProject = it }
+                        )
+
+                        Spacer(modifier = Modifier.height(11.dp))
+                    }
+
                     Text(
-                        text = "Проект",
+                        text = "Приоритет",
                         fontSize = 14.sp,
-                        lineHeight = 18.sp,
+                        lineHeight = 20.sp,
                         fontFamily = OnestFontFamily,
                         fontWeight = FontWeight.Normal,
                         color = BluePrimary300,
@@ -795,61 +818,38 @@ private fun TasksFilterDialog(
 
                     Spacer(modifier = Modifier.height(6.dp))
 
-                    FilterProjectSelector(
-                        availableProjects = availableProjects,
-                        selectedProject = selectedProject,
-                        expanded = projectExpanded,
-                        onExpandedChange = { projectExpanded = it },
-                        onProjectSelected = { selectedProject = it }
+                    FilterPrioritySelector(
+                        selectedPriority = selectedPriority,
+                        onPrioritySelected = { selectedPriority = it }
                     )
 
-                    Spacer(modifier = Modifier.height(11.dp))
-                }
+                    Spacer(modifier = Modifier.height(23.dp))
 
-                Text(
-                    text = "Приоритет",
-                    fontSize = 14.sp,
-                    lineHeight = 20.sp,
-                    fontFamily = OnestFontFamily,
-                    fontWeight = FontWeight.Normal,
-                    color = BluePrimary300,
-                    modifier = Modifier.padding(start = 11.dp)
-                )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 13.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        FilterActionButton(
+                            text = "Применить",
+                            filled = true,
+                            onClick = { onApply(selectedProject, selectedPriority) }
+                        )
 
-                Spacer(modifier = Modifier.height(6.dp))
-
-                FilterPrioritySelector(
-                    selectedPriority = selectedPriority,
-                    onPrioritySelected = { selectedPriority = it }
-                )
-
-                Spacer(modifier = Modifier.height(23.dp))
-
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 13.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    FilterActionButton(
-                        text = "Применить",
-                        filled = true,
-                        onClick = { onApply(selectedProject, selectedPriority) }
-                    )
-
-                    FilterActionButton(
-                        text = "Сбросить",
-                        filled = false,
-                        onClick = {
-                            selectedProject = null
-                            selectedPriority = null
-                            projectExpanded = false
-                            onReset()
-                        }
-                    )
+                        FilterActionButton(
+                            text = "Сбросить",
+                            filled = false,
+                            onClick = {
+                                selectedProject = null
+                                selectedPriority = null
+                                projectExpanded = false
+                                onReset()
+                            }
+                        )
+                    }
                 }
             }
-        }
         }
     }
 }
@@ -1049,7 +1049,7 @@ private fun FilterPrioritySelector(
     )
     val animatedColor by animateColorAsState(
         targetValue = when (selectedPriority) {
-            TaskPriority.LOW -> Color(0xFF26BC30)
+            TaskPriority.LOW -> Color(0xFF28C52E)
             TaskPriority.MEDIUM -> Color(0xFFD6C100)
             TaskPriority.HIGH -> Color(0xFFFF1E1E)
             null -> Color.Transparent
@@ -1232,7 +1232,11 @@ private fun TaskRow(
         isReviewTask -> Color(0xFF969696)
         else -> Color.Black
     }
-    
+    val projectColor = when {
+        isInactiveTask -> Color(0xFF70717A)
+        isReviewTask -> Color(0xFF969696)
+        else -> Color.Black
+    }
     val priorityTextColor = when {
         isInactiveTask || isReviewTask -> Color(0xFF70717A)
         else -> task.priority.color
@@ -1271,7 +1275,7 @@ private fun TaskRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(start = 44.dp, end = rowEndPadding),
+                .padding(start = 36.dp, end = rowEndPadding),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(
@@ -1291,6 +1295,18 @@ private fun TaskRow(
                     overflow = TextOverflow.Clip
                 )
 
+                Text(
+                    text = "Проект: ${task.project}",
+                    fontSize = 14.sp,
+                    lineHeight = 20.sp,
+                    letterSpacing = 0.25.sp,
+                    fontFamily = OnestFontFamily,
+                    fontWeight = FontWeight.Normal,
+                    color = projectColor,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
                 Row(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
@@ -1305,7 +1321,7 @@ private fun TaskRow(
                         maxLines = 1
                     )
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Box(
                         modifier = Modifier
@@ -1313,7 +1329,7 @@ private fun TaskRow(
                             .background(Color(0xFFD9D9D9), CircleShape)
                     )
 
-                    Spacer(modifier = Modifier.width(4.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
 
                     Text(
                         text = task.deadline,
@@ -1874,7 +1890,7 @@ private fun TaskPriorityReadOnlySelector(
             TaskPriorityReadOnlyItem(
                 text = "Низкий",
                 selected = priority == TaskPriority.LOW,
-                selectedColor = Color(0xFF26BC30),
+                selectedColor = Color(0xFF28C52E),
                 modifier = Modifier.weight(1f)
             )
 

@@ -99,7 +99,7 @@ fun EventsScreen(
                 ) {
                     Text(
                         text = "Нет мероприятий",
-                        fontSize = 20.sp,
+                        fontSize = 32.sp,
                         fontFamily = OnestFontFamily,
                         fontWeight = FontWeight.Normal,
                         color = Color(0xFF70717A),
