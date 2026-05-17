@@ -243,7 +243,7 @@ fun SummaryRow(
             )
 
             Text(
-                text = "Участников",
+                text = getMembersWord(membersCount),
                 fontFamily = OnestFontFamily,
                 fontWeight = FontWeight.Light,
                 fontSize = 13.sp,
@@ -274,7 +274,7 @@ fun SummaryRow(
             )
 
             Text(
-                text = "Задач",
+                text = getTasksWord(tasksCount),
                 fontFamily = OnestFontFamily,
                 fontWeight = FontWeight.Light,
                 fontSize = 13.sp,
@@ -404,5 +404,27 @@ fun FilterButtonExact(
             modifier = Modifier.size(32.dp),
             contentScale = ContentScale.Fit,
         )
+    }
+}
+
+fun getMembersWord(count: Int): String {
+    val lastDigit = count % 10
+    val lastTwoDigits = count % 100
+    return when {
+        lastTwoDigits in 11..14 -> "Участников"
+        lastDigit == 1 -> "Участник"
+        lastDigit in 2..4 -> "Участника"
+        else -> "Участников"
+    }
+}
+
+fun getTasksWord(count: Int): String {
+    val lastDigit = count % 10
+    val lastTwoDigits = count % 100
+    return when {
+        lastTwoDigits in 11..14 -> "Задач"
+        lastDigit == 1 -> "Задача"
+        lastDigit in 2..4 -> "Задачи"
+        else -> "Задач"
     }
 }

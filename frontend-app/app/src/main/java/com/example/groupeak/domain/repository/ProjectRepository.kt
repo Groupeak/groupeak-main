@@ -14,4 +14,8 @@ interface ProjectRepository {
     suspend fun getProjects(): Result<List<ProjectDto>>
 
     suspend fun getProjectMembers(projectId: Long): Result<List<ProjectMemberDto>>
+    
+    suspend fun inviteMember(projectId: Long, request: com.example.groupeak.data.remote.dto.InviteMemberRequest): Result<Unit>
+
+    suspend fun getProjectById(projectId: Long): Result<com.example.groupeak.data.remote.dto.ProjectDetailsDto>
 }

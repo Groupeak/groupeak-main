@@ -70,6 +70,10 @@ fun RootNavGraph(
             MainRoot(
                 onLogout = {
                     ServiceLocator.sessionManager.clear()
+                    rootNavController.navigate(Graph.AUTH) {
+                        popUpTo(rootNavController.graph.id) { inclusive = true }
+                        launchSingleTop = true
+                    }
                 }
             )
         }

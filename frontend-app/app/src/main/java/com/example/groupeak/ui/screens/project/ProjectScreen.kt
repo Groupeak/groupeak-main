@@ -394,7 +394,7 @@ private fun SummaryRow(
             Spacer(modifier = Modifier.width(4.dp))
 
             Text(
-                text = "$membersCount Участников",
+                text = getMembersString(membersCount),
                 fontFamily = OnestFontFamily,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
@@ -415,7 +415,7 @@ private fun SummaryRow(
             Spacer(modifier = Modifier.width(4.dp))
 
             Text(
-                text = "$tasksCount Задач",
+                text = getTasksString(tasksCount),
                 fontFamily = OnestFontFamily,
                 fontWeight = FontWeight.Medium,
                 fontSize = 13.sp,
@@ -1283,5 +1283,27 @@ private fun MemberRowExact(
                 .offset(x = positionColumnCenterX - positionColumnWidth / 2)
                 .width(positionColumnWidth)
         )
+    }
+}
+
+private fun getMembersString(count: Int): String {
+    val lastDigit = count % 10
+    val lastTwoDigits = count % 100
+    return when {
+        lastTwoDigits in 11..14 -> "$count Участников"
+        lastDigit == 1 -> "$count Участник"
+        lastDigit in 2..4 -> "$count Участника"
+        else -> "$count Участников"
+    }
+}
+
+private fun getTasksString(count: Int): String {
+    val lastDigit = count % 10
+    val lastTwoDigits = count % 100
+    return when {
+        lastTwoDigits in 11..14 -> "$count Задач"
+        lastDigit == 1 -> "$count Задача"
+        lastDigit in 2..4 -> "$count Задачи"
+        else -> "$count Задач"
     }
 }

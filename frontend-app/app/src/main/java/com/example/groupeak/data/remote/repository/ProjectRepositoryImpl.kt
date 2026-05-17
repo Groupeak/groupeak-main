@@ -55,4 +55,34 @@ class ProjectRepositoryImpl(
             })
         }
     }
+
+    override suspend fun inviteMember(
+        projectId: Long,
+        request: com.example.groupeak.data.remote.dto.InviteMemberRequest
+    ): Result<Unit> {
+        return try {
+            val response = api.inviteMember(projectId, request)
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val errorBody = response.errorBody()?.string() ?: "Unknown error"
+                Result.failure(Exception("API Error ${response.code()}: $errorBody"))
+            }
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
+        }
+    }
+
+    override suspend fun getProjectById(projectId: Long): Result<com.example.groupeak.data.remote.dto.ProjectDetailsDto> {
+        return try {
+            val response = api.getProjectById(projectId)
+            Result.success(response.project)
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e) {
+                sessionManager.clear()
+            })
+        }
+    }
 }

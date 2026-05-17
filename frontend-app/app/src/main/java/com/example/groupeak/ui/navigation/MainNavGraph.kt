@@ -291,47 +291,6 @@ fun MainNavGraph(
         }
 
 
-        /*composable(
-            route = Screen.ProjectTasks.route,
-            arguments = listOf(
-                navArgument("projectId") { type = NavType.LongType },
-                navArgument("isOwner") {
-                    type = NavType.BoolType
-                    defaultValue = false
-                },
-            ),
-        ) { backStackEntry ->
-            val projectId = backStackEntry.arguments?.getLong("projectId")
-                ?: return@composable
-
-            val isOwner = backStackEntry.arguments?.getBoolean("isOwner") ?: false
-
-            val baseState = remember(projectId, isOwner) {
-                mockProjectUiState(
-                    projectId = projectId,
-                    isOwner = isOwner,
-                )
-            }
-
-            var selectedTab by rememberSaveable(projectId, isOwner) {
-                mutableStateOf(ProjectTab.TASKS)
-            }
-
-            val uiState = baseState.copy(selectedTab = selectedTab)
-
-            ProjectScreen(
-                uiState = uiState,
-                onBack = { navController.popBackStack() },
-                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onTabSelected = { selectedTab = it },
-                onInfoClick = { },
-                onFilterClick = { },
-                onTaskClick = { },
-                onMemberClick = { },
-                onInviteMemberClick = { },
-            )
-        }*/
-
         composable(
             route = Screen.ProjectTasks.route,
             arguments = listOf(
@@ -346,37 +305,86 @@ fun MainNavGraph(
                 ?: return@composable
 
             val isOwner = backStackEntry.arguments?.getBoolean("isOwner") ?: false
+            android.util.Log.e("INVITE_DEBUG", "=== ProjectTasks: projectId=$projectId, isOwner=$isOwner ===")
 
-            val baseState = remember(projectId, isOwner) {
-                mockProjectForOwnerUiState(
-                    projectId = projectId,
+            if (isOwner) {
+                val vm: com.example.groupeak.ui.screens.project_for_owner.ProjectForOwnerViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            if (modelClass.isAssignableFrom(com.example.groupeak.ui.screens.project_for_owner.ProjectForOwnerViewModel::class.java)) {
+                                @Suppress("UNCHECKED_CAST")
+                                return com.example.groupeak.ui.screens.project_for_owner.ProjectForOwnerViewModel(
+                                    projectId,
+                                    ServiceLocator.projectRepository,
+                                    ServiceLocator.taskRepository,
+                                    ServiceLocator.eventRepository
+                                ) as T
+                            }
+                            throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                        }
+                    }
+                )
+
+                var selectedTab by rememberSaveable(projectId) {
+                    mutableStateOf(ProjectOwnerTab.TASKS)
+                }
+
+                val uiState = vm.uiState.copy(selectedTab = selectedTab)
+
+                ProjectForOwnerScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                    onTabSelected = { selectedTab = it },
+                    onInfoClick = { },
+                    onFilterClick = { },
+                    onTaskClick = { },
+                    onMemberClick = { },
+                    onInviteMemberClick = { },
+                    onDeleteTask = { },
+                    onDeleteMember = { },
+                    onUpdateTaskDate = { _, _ -> },
+                    onInviteEmailChange = { vm.updateInviteEmail(it) },
+                    onInvitePositionChange = { vm.updateInvitePosition(it) },
+                    onSendInvite = { vm.sendInvite() },
+                    onSendInviteWithEmail = { email, _ -> vm.sendInviteDirectly(email) },
+                    onNewDateChange = { },
+                )
+            } else {
+                val vm: com.example.groupeak.ui.screens.project.ProjectViewModel = viewModel(
+                    factory = object : ViewModelProvider.Factory {
+                        override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                            if (modelClass.isAssignableFrom(com.example.groupeak.ui.screens.project.ProjectViewModel::class.java)) {
+                                @Suppress("UNCHECKED_CAST")
+                                return com.example.groupeak.ui.screens.project.ProjectViewModel(
+                                    projectId,
+                                    ServiceLocator.projectRepository,
+                                    ServiceLocator.taskRepository
+                                ) as T
+                            }
+                            throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                        }
+                    }
+                )
+
+                var selectedTab by rememberSaveable(projectId) {
+                    mutableStateOf(ProjectTab.TASKS)
+                }
+
+                val uiState = vm.uiState.copy(selectedTab = selectedTab)
+
+                ProjectScreen(
+                    uiState = uiState,
+                    onBack = { navController.popBackStack() },
+                    onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
+                    onTabSelected = { selectedTab = it },
+                    onInfoClick = { },
+                    onFilterClick = { },
+                    onTaskClick = { },
+                    onMemberClick = { },
+                    onInviteMemberClick = { },
                 )
             }
-
-            var selectedTab by rememberSaveable(projectId) {
-                mutableStateOf(ProjectOwnerTab.TASKS)
-            }
-
-            val uiState = baseState.copy(selectedTab = selectedTab)
-
-            ProjectForOwnerScreen(
-                uiState = uiState,
-                onBack = { navController.popBackStack() },
-                onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onTabSelected = { selectedTab = it },
-                onInfoClick = { },
-                onFilterClick = { },
-                onTaskClick = { },
-                onMemberClick = { },
-                onInviteMemberClick = { },
-                onDeleteTask = { },
-                onDeleteMember = { },
-                onUpdateTaskDate = { _, _ -> },
-                onInviteEmailChange = { },
-                onInvitePositionChange = { },
-                onSendInvite = { },
-                onNewDateChange = { },
-            )
         }
 
         composable(Screen.CreateTask.route) {

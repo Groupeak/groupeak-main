@@ -23,4 +23,15 @@ interface ProjectApi {
     suspend fun getProjectMembers(
         @Path("projectId") projectId: Long,
     ): ListProjectMembersResponse
+
+    @POST("api/v1/projects/{projectId}/invites")
+    suspend fun inviteMember(
+        @Path("projectId") projectId: Long,
+        @Body request: com.example.groupeak.data.remote.dto.InviteMemberRequest
+    ): retrofit2.Response<Unit>
+
+    @GET("api/v1/projects/{projectId}")
+    suspend fun getProjectById(
+        @Path("projectId") projectId: Long,
+    ): com.example.groupeak.data.remote.dto.GetProjectResponse
 }

@@ -290,6 +290,7 @@ fun MembersBodySimple(
     onMemberClick: (Long) -> Unit,
     onInviteMemberClick: () -> Unit,
     onDeleteMember: (Long) -> Unit,
+    onSendInvite: (email: String, role: String) -> Unit = { _, _ -> },
 ) {
 
     val scrollState = rememberScrollState()
@@ -380,7 +381,9 @@ fun MembersBodySimple(
             onDismiss = {
                 showInviteDialog = false
             },
-            onSendInvite = { _, _ ->
+            onSendInvite = { email, role ->
+                android.util.Log.e("INVITE_DEBUG", "InviteMemberDialog onSendInvite: email='$email', role='$role'")
+                onSendInvite(email, role)
                 showInviteDialog = false
             }
         )

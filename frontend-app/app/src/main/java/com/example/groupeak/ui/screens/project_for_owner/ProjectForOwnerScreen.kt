@@ -39,6 +39,7 @@ fun ProjectForOwnerScreen(
     onInviteEmailChange: (String) -> Unit = {},
     onInvitePositionChange: (String) -> Unit = {},
     onSendInvite: () -> Unit = {},
+    onSendInviteWithEmail: (email: String, role: String) -> Unit = { _, _ -> },
     onNewDateChange: (String) -> Unit = {},
     hasNotifications: Boolean = true,
 ) {
@@ -133,7 +134,8 @@ fun ProjectForOwnerScreen(
                             uiState = uiState,
                             onMemberClick = onMemberClick,
                             onInviteMemberClick = { showInviteMemberDialogLocal = true },
-                            onDeleteMember = { memberToDeleteId = it; showDeleteMemberDialogLocal = true }
+                            onDeleteMember = { memberToDeleteId = it; showDeleteMemberDialogLocal = true },
+                            onSendInvite = onSendInviteWithEmail,
                         )
                         ProjectOwnerTab.EVENTS -> EventsBody(
                             events = uiState.events,
@@ -181,12 +183,22 @@ fun ProjectForOwnerScreen(
         }
 
         if (showInviteMemberDialogLocal) {
+            android.util.Log.e("INVITE_DEBUG", "=== ДИАЛОГ ОТКРЫТ === Email='${uiState.inviteEmail}', Position='${uiState.invitePosition}'")
             InviteMemberDialog(
                 email = uiState.inviteEmail,
                 position = uiState.invitePosition,
                 onEmailChange = onInviteEmailChange,
                 onPositionChange = onInvitePositionChange,
-                onSend = { onSendInvite(); showInviteMemberDialogLocal = false },
+                onSend = { 
+                    android.util.Log.e("INVITE_DEBUG", "Кнопка нажата! Email='${uiState.inviteEmail}', Position='${uiState.invitePosition}'")
+                    if (uiState.inviteEmail.isNotBlank() && uiState.invitePosition.isNotBlank()) {
+                        android.util.Log.e("INVITE_DEBUG", "Валидация пройдена, отправляем запрос...")
+                        onSendInvite()
+                        showInviteMemberDialogLocal = false 
+                    } else {
+                        android.util.Log.e("INVITE_DEBUG", "Валидация НЕ пройдена. Поля пустые!")
+                    }
+                },
                 onDismiss = { showInviteMemberDialogLocal = false }
             )
         }

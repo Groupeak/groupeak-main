@@ -41,3 +41,23 @@ data class ProjectMemberDto(
 data class ListProjectMembersResponse(
     @SerializedName("members") val members: List<ProjectMemberDto>,
 )
+
+data class ProjectDetailsDto(
+    @SerializedName("id") val id: Long,
+    @SerializedName("owner_id") val ownerId: Long,
+    @SerializedName("project_name") val projectName: String,
+    @SerializedName("description") val description: String?,
+    @SerializedName("deadline_at") val deadlineAt: String?,
+    @SerializedName("created_at") val createdAt: String,
+    @SerializedName("updated_at") val updatedAt: String,
+    @SerializedName("member_count") val memberCount: Int,
+    @SerializedName("task_count") val taskCount: Int,
+)
+
+data class GetProjectResponse(
+    @SerializedName("project") val project: ProjectDetailsDto,
+)
+
+data class InviteMemberRequest(
+    @SerializedName("email") val email: String
+)
