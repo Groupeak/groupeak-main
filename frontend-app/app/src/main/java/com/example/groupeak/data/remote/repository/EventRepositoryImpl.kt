@@ -3,6 +3,7 @@ package com.example.groupeak.data.remote.repository
 import android.util.Log
 import com.example.groupeak.data.remote.api.EventApi
 import com.example.groupeak.data.remote.dto.CreateEventRequest
+import com.example.groupeak.data.remote.dto.EventResponse
 import com.example.groupeak.domain.repository.EventRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,6 +34,16 @@ class EventRepositoryImpl(
             Result.success(Unit)
         } catch (e: Exception) {
             Log.e("EventRepositoryImpl", "createEvent error", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun getMyEvents(): Result<List<EventResponse>> = withContext(Dispatchers.IO) {
+        try {
+            val response = api.getMyEvents()
+            Result.success(response.events ?: emptyList())
+        } catch (e: Exception) {
+            Log.e("EventRepositoryImpl", "getMyEvents error", e)
             Result.failure(e)
         }
     }

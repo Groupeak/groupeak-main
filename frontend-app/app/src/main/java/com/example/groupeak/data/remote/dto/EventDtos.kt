@@ -36,6 +36,10 @@ data class EventResponse(
     val createdAt: String,
     @SerializedName("updated_at")
     val updatedAt: String,
-    @SerializedName("participants")
+    @SerializedName("participant_ids")
     val participants: List<Long>?
+)
+
+data class EventListResponse(
+    @SerializedName("events") val events: List<EventResponse>?
 )

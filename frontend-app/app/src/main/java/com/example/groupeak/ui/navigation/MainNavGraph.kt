@@ -32,7 +32,7 @@ import com.example.groupeak.ui.screens.create_task.CreateTaskScreen
 import com.example.groupeak.ui.screens.create_task.CreateTaskViewModel
 import com.example.groupeak.ui.screens.feedback.FeedbackScreen
 import com.example.groupeak.ui.screens.home.HomeScreen
-import com.example.groupeak.ui.screens.home.mockHomeUiState
+import com.example.groupeak.ui.screens.home.HomeViewModel
 import com.example.groupeak.ui.screens.notifications.NotificationsScreen
 import com.example.groupeak.ui.screens.profile.ProfileScreen
 import com.example.groupeak.ui.screens.profile.ProfileViewModel
@@ -94,7 +94,24 @@ fun MainNavGraph(
         }
 
         composable(Screen.Home.route) {
-            val state = remember { mockHomeUiState() }
+            val vm: HomeViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(HomeViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return HomeViewModel(
+                                ServiceLocator.userRepository,
+                                ServiceLocator.projectRepository,
+                                ServiceLocator.taskRepository,
+                                ServiceLocator.sessionManager,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
+
+            val state = vm.uiState
 
             HomeScreen(
                 uiState = state,
@@ -458,7 +475,20 @@ fun MainNavGraph(
 
         // Экран мероприятий
         composable(Screen.Events.route) {
-            val vm: EventsViewModel = viewModel()
+            val vm: EventsViewModel = viewModel(
+                factory = object : ViewModelProvider.Factory {
+                    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+                        if (modelClass.isAssignableFrom(EventsViewModel::class.java)) {
+                            @Suppress("UNCHECKED_CAST")
+                            return EventsViewModel(
+                                ServiceLocator.eventRepository,
+                                ServiceLocator.projectRepository,
+                            ) as T
+                        }
+                        throw IllegalArgumentException("Unknown ViewModel class: $modelClass")
+                    }
+                }
+            )
             val uiState by vm.uiState.collectAsState()
 
             EventsScreen(

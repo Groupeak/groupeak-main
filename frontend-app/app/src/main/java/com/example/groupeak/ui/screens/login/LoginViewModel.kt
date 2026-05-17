@@ -54,8 +54,6 @@ class LoginViewModel(
             return
         }
 
-
-
         val current = uiState
 
         // Очищаем старые ошибки

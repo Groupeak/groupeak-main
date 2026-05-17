@@ -93,16 +93,16 @@ fun EventsScreen(
             if (uiState.events.isEmpty()) {
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = 15.dp),
-                    contentAlignment = Alignment.Center
+                        .fillMaxWidth()
+                        .padding(top = 338.dp),
+                    contentAlignment = Alignment.TopCenter
                 ) {
                     Text(
                         text = "Нет мероприятий",
-                        fontSize = 20.sp,
+                        fontSize = 32.sp,
                         fontFamily = OnestFontFamily,
-                        fontWeight = FontWeight.Normal,
-                        color = Color(0xFF70717A),
+                        fontWeight = FontWeight.Medium,
+                        color = Color(0xFF7071FA),
                         textAlign = TextAlign.Center
                     )
                 }
