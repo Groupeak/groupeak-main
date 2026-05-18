@@ -41,3 +41,14 @@ data class TaskResponse(
 data class StatusResponse(
     @SerializedName("status") val status: String,
 )
+
+data class PatchTaskRequest(
+    @SerializedName("task_name") val taskName: String? = null,
+    @SerializedName("task_description") val taskDescription: String? = null,
+    @SerializedName("due_date") val dueDate: String? = null,
+    @SerializedName("clear_due_at") val clearDueAt: Boolean? = null,
+    @SerializedName("status") val status: String? = null,
+    @SerializedName("priority") val priority: String? = null,
+    @SerializedName("assignee_ids") val assigneeIds: List<Int>? = null,
+    @SerializedName("comments") val comments: String? = null,
+)

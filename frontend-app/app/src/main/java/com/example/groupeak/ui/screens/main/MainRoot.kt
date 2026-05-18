@@ -41,7 +41,10 @@ fun MainRoot(
                 currentRoute == Screen.ChangePassword.route -> Screen.Home.route
 
         currentRoute == Screen.ProjectTasks.route ||
-                currentRoute?.startsWith("project_tasks/") == true -> Screen.Tasks.route
+                currentRoute?.startsWith("project_tasks/") == true -> Screen.Tasks.baseRoute
+
+        currentRoute == Screen.Tasks.route ||
+                currentRoute?.startsWith(Screen.Tasks.baseRoute) == true -> Screen.Tasks.baseRoute
 
         else -> currentRoute
     }

@@ -475,8 +475,8 @@ fun ProjectEventEditDialog(
     initialTitle: String = event.title,
     initialDate: String = event.date,
     initialTime: String = event.time,
-    initialLink: String = "",
-    initialDescription: String = "",
+    initialLink: String = event.link,
+    initialDescription: String = event.description,
     initialParticipants: String = "",
     onTitleChange: (String) -> Unit,
     onDateChange: (String) -> Unit,
@@ -485,7 +485,7 @@ fun ProjectEventEditDialog(
     onDescriptionChange: (String) -> Unit,
     onParticipantsChange: (String) -> Unit,
     onProjectSelect: (String) -> Unit,
-    onSave: () -> Unit,
+    onSave: (title: String, date: String, time: String, link: String, description: String, participants: String) -> Unit,
     onDismiss: () -> Unit
 ) {
     var title by remember { mutableStateOf(initialTitle) }
@@ -955,7 +955,7 @@ fun ProjectEventEditDialog(
                                     timeError = "Неверное время"
                                     return@PrimaryButton
                                 }
-                                onSave()
+                                onSave(title, date, time, link, description, participants)
                             },
                             fontSize = 14.sp
                         )

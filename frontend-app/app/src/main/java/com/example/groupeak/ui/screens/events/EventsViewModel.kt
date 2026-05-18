@@ -30,10 +30,10 @@ class EventsViewModel(
     private val timeFormatter = DateTimeFormatter.ofPattern("HH:mm")
 
     init {
-        loadEvents()
+        refreshEvents()
     }
 
-    private fun loadEvents() {
+    fun refreshEvents() {
         viewModelScope.launch {
             eventRepository.getMyEvents().onSuccess { events ->
                 val uniqueProjectIds = events.map { it.projectId }.distinct()

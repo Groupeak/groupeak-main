@@ -88,7 +88,8 @@ private enum class TaskPriority(val title: String, val color: Color) {
 
 private enum class InactiveStatus(val title: String, val color: Color) {
     DONE("Выполнено", Color(0xFF32CD32)),
-    OVERDUE("Просрочено", Color(0xFFFF1E1E))
+    OVERDUE("Просрочено", Color(0xFFFF1E1E)),
+    REJECTED("Отклонено", Color(0xFFFF8C00))
 }
 
 private data class TaskParticipantUi(
@@ -112,7 +113,7 @@ private data class TaskUi(
     val participants: List<TaskParticipantUi> = emptyList(),
 )
 
-private val currentStatuses = setOf("todo", "in_progress", "postponed")
+private val currentStatuses = setOf("todo", "in_progress")
 
 private val NotifHitBoxSize = 28.dp
 private val NotifIconSize = 22.dp
@@ -133,6 +134,9 @@ fun TasksScreen(
     onTaskClick: (Long, Long) -> Unit,
     onDismissTaskDetails: () -> Unit,
     onSubmitTask: (Long, Long) -> Unit,
+    onConfirmDelete: (Long) -> Unit,
+    onCancelDelete: () -> Unit,
+    onDeleteTask: (Long, Long) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -237,6 +241,12 @@ fun TasksScreen(
                 inactiveStatus = InactiveStatus.DONE,
             )
 
+            task.status == "postponed" -> task.toTaskUi(
+                projectNames = uiState.projectNamesById,
+                bucket = TaskBucket.INACTIVE,
+                inactiveStatus = InactiveStatus.REJECTED,
+            )
+
             task.id in overdueTaskIds -> task.toTaskUi(
                 projectNames = uiState.projectNamesById,
                 bucket = TaskBucket.INACTIVE,
@@ -322,6 +332,34 @@ fun TasksScreen(
                     TaskDetailsDialog(
                         task = selectedTask,
                         onDismiss = onDismissTaskDetails,
+                    )
+                }
+            }
+
+            if (uiState.taskToDeleteId != null) {
+                val taskToDelete = uiState.tasks.find { it.id == uiState.taskToDeleteId }
+                if (taskToDelete != null) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = onCancelDelete,
+                        containerColor = Color.White,
+                        title = { Text("Удалить задачу?", fontFamily = OnestFontFamily) },
+                        text = { Text("Вы уверены, что хотите удалить задачу \"${taskToDelete.title}\"?", fontFamily = OnestFontFamily) },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = { onDeleteTask(taskToDelete.projectId, taskToDelete.id) },
+                                enabled = uiState.isDeletingTaskId == null
+                            ) {
+                                Text(if (uiState.isDeletingTaskId != null) "Удаление..." else "Удалить", color = Color.Red, fontFamily = OnestFontFamily)
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(
+                                onClick = onCancelDelete,
+                                enabled = uiState.isDeletingTaskId == null
+                            ) {
+                                Text("Отмена", color = BluePrimary300, fontFamily = OnestFontFamily)
+                            }
+                        }
                     )
                 }
             }
@@ -2035,7 +2073,7 @@ private fun TaskDto.toTaskUi(
     projectNames: Map<Long, String>,
     bucket: TaskBucket = when (status) {
         "in_review" -> TaskBucket.REVIEW
-        "done" -> TaskBucket.INACTIVE
+        "done", "postponed" -> TaskBucket.INACTIVE
         else -> TaskBucket.CURRENT
     },
     inactiveStatus: InactiveStatus? = null,
@@ -2069,13 +2107,14 @@ private fun TaskDetailsUi.toTaskUi(): TaskUi {
         description = task.description.orEmpty(),
         bucket = when (task.status) {
             "in_review" -> TaskBucket.REVIEW
-            "done" -> TaskBucket.INACTIVE
+            "done", "postponed" -> TaskBucket.INACTIVE
             else -> TaskBucket.CURRENT
         },
         backendStatus = task.status,
         checked = task.status == "in_review",
         inactiveStatus = when {
             task.status == "done" -> InactiveStatus.DONE
+            task.status == "postponed" -> InactiveStatus.REJECTED
             task.isOverdue() -> InactiveStatus.OVERDUE
             else -> null
         },

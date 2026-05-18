@@ -11,7 +11,16 @@ sealed class Screen(val route: String) {
     object ChangeEmail : Screen("change_email")
     object ChangePassword : Screen("change_password")
     object Notifications : Screen("notifications")
-    object Tasks : Screen("tasks")
+    object Tasks : Screen("tasks?openProjectId={openProjectId}&openTaskId={openTaskId}") {
+        val baseRoute = "tasks"
+        fun createRoute(openProjectId: Long? = null, openTaskId: Long? = null): String {
+            return if (openProjectId != null && openTaskId != null) {
+                "tasks?openProjectId=$openProjectId&openTaskId=$openTaskId"
+            } else {
+                "tasks"
+            }
+        }
+    }
 
     object ProjectTasks : Screen("project_tasks/{projectId}?isOwner={isOwner}") {
         fun createRoute(

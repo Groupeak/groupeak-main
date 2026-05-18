@@ -48,6 +48,9 @@ data class ProjectEventItemUi(
     val title: String,
     val date: String,
     val time: String,
+    val description: String = "",
+    val link: String = "",
+    val participants: List<Long> = emptyList()
 )
 
 data class ProjectForOwnerUiState(

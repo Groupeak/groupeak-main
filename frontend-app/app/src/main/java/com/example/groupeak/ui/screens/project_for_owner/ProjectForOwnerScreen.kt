@@ -36,6 +36,9 @@ fun ProjectForOwnerScreen(
     onDeleteMember: (Long) -> Unit = {},
     onDeleteEvent: (Long) -> Unit = {},
     onUpdateTaskDate: (Long, String) -> Unit = { _, _ -> },
+    onApproveTask: (Long, String) -> Unit = { _, _ -> },
+    onRejectTask: (Long) -> Unit = {},
+    onUpdateEvent: (Long, String, String, String, String, String, String) -> Unit = { _, _, _, _, _, _, _ -> },
     onInviteEmailChange: (String) -> Unit = {},
     onInvitePositionChange: (String) -> Unit = {},
     onSendInvite: () -> Unit = {},
@@ -163,7 +166,7 @@ fun ProjectForOwnerScreen(
             DeleteConfirmationDialog(
                 title = "Задача выполнена?",
                 onConfirm = { 
-                    // Здесь вызывай метод ViewModel для подтверждения
+                    taskToProcessId?.let { onApproveTask(it, "") }
                     showApproveTaskDialog = false 
                 },
                 onDismiss = { showApproveTaskDialog = false }
@@ -175,7 +178,7 @@ fun ProjectForOwnerScreen(
             DeleteConfirmationDialog(
                 title = "Отклонить задачу?",
                 onConfirm = { 
-                    // Здесь вызывай метод ViewModel для отклонения
+                    taskToProcessId?.let(onRejectTask)
                     showRejectTaskDialog = false 
                 },
                 onDismiss = { showRejectTaskDialog = false }
@@ -228,9 +231,13 @@ fun ProjectForOwnerScreen(
                     projectName = uiState.title,
                     availableProjects = listOf("Программа для Tahoe", "Open Space"),
                     availableMembers = uiState.members.map { it.fullName to it.position },
+                    initialParticipants = event.participants.mapNotNull { id -> uiState.members.find { it.id == id }?.fullName }.joinToString(", "),
                     onTitleChange = {}, onDateChange = {}, onTimeChange = {}, onLinkChange = {},
                     onDescriptionChange = {}, onParticipantsChange = {}, onProjectSelect = {},
-                    onSave = { showEditEventDialog = false },
+                    onSave = { title, date, time, link, description, participants ->
+                        onUpdateEvent(event.id, title, date, time, link, description, participants)
+                        showEditEventDialog = false
+                    },
                     onDismiss = { showEditEventDialog = false }
                 )
             }

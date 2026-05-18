@@ -7,6 +7,8 @@ import com.example.groupeak.data.remote.dto.StatusResponse
 import com.example.groupeak.data.remote.dto.TaskResponse
 import retrofit2.http.Body
 import retrofit2.http.GET
+import retrofit2.http.PATCH
+import retrofit2.http.DELETE
 import retrofit2.http.POST
 import retrofit2.http.Path
 import retrofit2.http.Query
@@ -45,6 +47,19 @@ interface TaskApi {
         @Path("projectId") projectId: Long,
         @Path("taskId") taskId: Long,
     ): StatusResponse
+
+    @PATCH("api/v1/projects/{projectId}/tasks/{taskId}")
+    suspend fun updateTask(
+        @Path("projectId") projectId: Long,
+        @Path("taskId") taskId: Long,
+        @Body body: com.example.groupeak.data.remote.dto.PatchTaskRequest,
+    ): TaskResponse
+
+    @DELETE("api/v1/projects/{projectId}/tasks/{taskId}")
+    suspend fun deleteTask(
+        @Path("projectId") projectId: Long,
+        @Path("taskId") taskId: Long,
+    ): retrofit2.Response<Unit>
 
     @GET("api/v1/tasks/my")
     suspend fun getMyTasks(): ListTasksResponse

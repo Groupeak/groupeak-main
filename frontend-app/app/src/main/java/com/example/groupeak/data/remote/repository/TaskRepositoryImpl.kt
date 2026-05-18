@@ -101,6 +101,38 @@ class TaskRepositoryImpl(
         }
     }
 
+    override suspend fun updateTask(
+        projectId: Long,
+        taskId: Long,
+        request: com.example.groupeak.data.remote.dto.PatchTaskRequest,
+    ): Result<TaskDto> {
+        return try {
+            val response = api.updateTask(
+                projectId = projectId,
+                taskId = taskId,
+                body = request,
+            )
+            Result.success(response.task)
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e))
+        }
+    }
+
+    override suspend fun deleteTask(
+        projectId: Long,
+        taskId: Long,
+    ): Result<Unit> {
+        return try {
+            api.deleteTask(
+                projectId = projectId,
+                taskId = taskId,
+            )
+            Result.success(Unit)
+        } catch (e: Throwable) {
+            Result.failure(parseApiError(e))
+        }
+    }
+
     override suspend fun getMyTasks(): Result<List<TaskDto>> {
         return try {
             val response = api.getMyTasks()

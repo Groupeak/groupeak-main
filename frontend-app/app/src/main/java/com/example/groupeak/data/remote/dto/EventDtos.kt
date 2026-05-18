@@ -17,6 +17,21 @@ data class CreateEventRequest(
     val participantIds: List<Long>
 )
 
+data class UpdateEventRequest(
+    @SerializedName("title")
+    val title: String?,
+    @SerializedName("meeting_url")
+    val meetingUrl: String?,
+    @SerializedName("description")
+    val description: String?,
+    @SerializedName("start_at")
+    val startAt: String?,
+    @SerializedName("end_at")
+    val endAt: String?,
+    @SerializedName("participant_ids")
+    val participantIds: List<Long>?
+)
+
 data class EventResponse(
     @SerializedName("id")
     val id: Long,

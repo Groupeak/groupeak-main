@@ -173,6 +173,44 @@ class TasksViewModel(
         }
     }
 
+    fun confirmDelete(taskId: Long) {
+        uiState = uiState.copy(taskToDeleteId = taskId)
+    }
+
+    fun cancelDelete() {
+        uiState = uiState.copy(taskToDeleteId = null)
+    }
+
+    fun deleteTask(projectId: Long, taskId: Long) {
+        if (uiState.isDeletingTaskId != null) return
+
+        uiState = uiState.copy(
+            isDeletingTaskId = taskId,
+            taskToDeleteId = null,
+            statusMessage = null,
+            statusMessageIsError = false,
+        )
+
+        viewModelScope.launch {
+            val result = taskRepository.deleteTask(projectId, taskId)
+
+            result
+                .onSuccess {
+                    uiState = uiState.copy(isDeletingTaskId = null)
+                    closeTaskDetails()
+                    showStatusMessage("Задача удалена", isError = false)
+                    loadTasks()
+                }
+                .onFailure { throwable ->
+                    uiState = uiState.copy(isDeletingTaskId = null)
+                    showStatusMessage(
+                        throwable.message ?: "Не удалось удалить задачу",
+                        isError = true,
+                    )
+                }
+        }
+    }
+
     fun refreshTasks(clearStatus: Boolean = false) {
         if (clearStatus) {
             uiState = uiState.copy(

@@ -493,7 +493,7 @@ fun ExactTaskRow(
                             painter = painterResource(id = R.drawable.ic_task_completed),
                             contentDescription = "Выполнено в срок",
                             tint = Color.Unspecified,
-                            modifier = Modifier.size(22.dp),
+                            modifier = Modifier.size(32.dp),
                         )
                     }
                     TaskVisualType.ALARM_OFF -> {
@@ -508,7 +508,7 @@ fun ExactTaskRow(
                             painter = painterResource(id = R.drawable.ic_task_not_completed),
                             contentDescription = "Просрочено",
                             tint = Color.Unspecified,
-                            modifier = Modifier.size(24.dp),
+                            modifier = Modifier.size(32.dp),
                         )
                     }
                     else -> {

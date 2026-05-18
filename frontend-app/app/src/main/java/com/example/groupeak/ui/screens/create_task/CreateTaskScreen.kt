@@ -518,7 +518,7 @@ fun CreateTaskScreen(
 
         if (showParticipantsDialog) {
             Dialog(
-                onDismissRequest = { showProjectDialog = false },
+                onDismissRequest = { showParticipantsDialog = false },
                 properties = DialogProperties(
                     usePlatformDefaultWidth = false,
                     dismissOnClickOutside = true

@@ -36,6 +36,17 @@ interface TaskRepository {
         taskId: Long,
     ): Result<Unit>
 
+    suspend fun updateTask(
+        projectId: Long,
+        taskId: Long,
+        request: com.example.groupeak.data.remote.dto.PatchTaskRequest,
+    ): Result<TaskDto>
+
+    suspend fun deleteTask(
+        projectId: Long,
+        taskId: Long,
+    ): Result<Unit>
+
     suspend fun getMyTasks(): Result<List<TaskDto>>
 
     suspend fun getNearestTasks(): Result<List<TaskDto>>

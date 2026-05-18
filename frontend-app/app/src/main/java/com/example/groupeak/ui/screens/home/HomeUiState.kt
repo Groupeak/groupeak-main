@@ -10,6 +10,8 @@ data class HomeUiState(
 )
 
 data class HomeTaskUi(
+    val id: Long,
+    val projectId: Long,
     val title: String,
     val projectName: String,
     val deadline: String,
@@ -31,16 +33,22 @@ fun mockHomeUiState(): HomeUiState {
         hasNotifications = true,
         upcomingTasks = listOf(
             HomeTaskUi(
+                id = 1L,
+                projectId = 1L,
                 title = "Подготовить отчет по работе",
                 projectName = "Программа для Tahoe",
                 deadline = "22.02.26",
             ),
             HomeTaskUi(
+                id = 2L,
+                projectId = 2L,
                 title = "Проанализировать целевую аудиторию",
                 projectName = "Open Space",
                 deadline = "25.02.26",
             ),
             HomeTaskUi(
+                id = 3L,
+                projectId = 1L,
                 title = "Проверить код на корректность по тестам",
                 projectName = "Программа для Tahoe",
                 deadline = "28.02.26",

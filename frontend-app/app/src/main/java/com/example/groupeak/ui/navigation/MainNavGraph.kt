@@ -1,6 +1,7 @@
 package com.example.groupeak.ui.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -113,11 +114,27 @@ fun MainNavGraph(
 
             val state = vm.uiState
 
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        vm.refreshHomeContent()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+
             HomeScreen(
                 uiState = state,
                 onProfileClick = { navController.navigate(Screen.Profile.route) },
                 onNotificationsClick = { navController.navigate(Screen.Notifications.route) },
-                onAllTasksClick = { navController.navigate(Screen.Tasks.route) },
+                onAllTasksClick = { navController.navigate(Screen.Tasks.createRoute()) },
+                onTaskClick = { projectId, taskId ->
+                    navController.navigate(Screen.Tasks.createRoute(projectId, taskId))
+                },
                 onProjectClick = { projectId, isOwner ->
                     navController.navigate(Screen.ProjectTasks.createRoute(projectId, isOwner))
                 },
@@ -256,7 +273,22 @@ fun MainNavGraph(
             )
         }
 
-        composable(Screen.Tasks.route) { backStackEntry ->
+        composable(
+            route = Screen.Tasks.route,
+            arguments = listOf(
+                navArgument("openProjectId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+                navArgument("openTaskId") {
+                    type = NavType.LongType
+                    defaultValue = -1L
+                },
+            ),
+        ) { backStackEntry ->
+            val openProjectId = backStackEntry.arguments?.getLong("openProjectId")?.takeIf { it > 0 }
+            val openTaskId = backStackEntry.arguments?.getLong("openTaskId")?.takeIf { it > 0 }
+
             val vm: TasksViewModel = viewModel(
                 factory = TasksViewModelFactory(
                     taskRepository = ServiceLocator.taskRepository,
@@ -277,6 +309,26 @@ fun MainNavGraph(
                 }
             }
 
+            // Auto-open task details if navigated with specific task
+            LaunchedEffect(openProjectId, openTaskId) {
+                if (openProjectId != null && openTaskId != null) {
+                    vm.openTask(openProjectId, openTaskId)
+                }
+            }
+
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        vm.refreshTasks(clearStatus = false)
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
+
             TasksScreen(
                 uiState = uiState,
                 onBack = { navController.popBackStack() },
@@ -287,6 +339,9 @@ fun MainNavGraph(
                 onTaskClick = vm::openTask,
                 onDismissTaskDetails = vm::closeTaskDetails,
                 onSubmitTask = vm::submitTaskForReview,
+                onConfirmDelete = vm::confirmDelete,
+                onCancelDelete = vm::cancelDelete,
+                onDeleteTask = vm::deleteTask,
             )
         }
 
@@ -331,6 +386,19 @@ fun MainNavGraph(
 
                 val uiState = vm.uiState.copy(selectedTab = selectedTab)
 
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            vm.refreshData()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
+
                 ProjectForOwnerScreen(
                     uiState = uiState,
                     onBack = { navController.popBackStack() },
@@ -341,9 +409,15 @@ fun MainNavGraph(
                     onTaskClick = { },
                     onMemberClick = { },
                     onInviteMemberClick = { },
-                    onDeleteTask = { },
+                    onDeleteTask = { vm.deleteTask(it) },
+                    onDeleteEvent = { vm.deleteEvent(it) },
+                    onUpdateEvent = { id, title, date, time, link, desc, parts ->
+                        vm.updateEvent(id, title, date, time, link, desc, parts)
+                    },
                     onDeleteMember = { },
-                    onUpdateTaskDate = { _, _ -> },
+                    onUpdateTaskDate = { id, date -> vm.approveTask(id, date) },
+                    onApproveTask = { id, date -> vm.approveTask(id, date) },
+                    onRejectTask = { vm.rejectTask(it) },
                     onInviteEmailChange = { vm.updateInviteEmail(it) },
                     onInvitePositionChange = { vm.updateInvitePosition(it) },
                     onSendInvite = { vm.sendInvite() },
@@ -372,6 +446,19 @@ fun MainNavGraph(
                 }
 
                 val uiState = vm.uiState.copy(selectedTab = selectedTab)
+
+                val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+                DisposableEffect(lifecycleOwner) {
+                    val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                        if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                            vm.refreshData()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
+                    }
+                }
 
                 ProjectScreen(
                     uiState = uiState,
@@ -422,6 +509,7 @@ fun MainNavGraph(
 
                         val cameFromTasks =
                             previousRoute == Screen.Tasks.route ||
+                                    previousRoute?.startsWith(Screen.Tasks.baseRoute) == true ||
                                     previousRoute == Screen.ProjectTasks.route ||
                                     previousRoute?.startsWith("$projectTasksRouteBase/") == true
 
@@ -429,7 +517,7 @@ fun MainNavGraph(
                             previousEntry?.savedStateHandle?.set("task_created", true)
                             navController.popBackStack()
                         } else {
-                            navController.navigate(Screen.Tasks.route) {
+                            navController.navigate(Screen.Tasks.createRoute()) {
                                 popUpTo(navController.graph.startDestinationId)
                                 launchSingleTop = true
                             }
@@ -498,6 +586,19 @@ fun MainNavGraph(
                 }
             )
             val uiState by vm.uiState.collectAsState()
+
+            val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+            androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
+                val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+                    if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                        vm.refreshEvents()
+                    }
+                }
+                lifecycleOwner.lifecycle.addObserver(observer)
+                onDispose {
+                    lifecycleOwner.lifecycle.removeObserver(observer)
+                }
+            }
 
             EventsScreen(
                 uiState = uiState,

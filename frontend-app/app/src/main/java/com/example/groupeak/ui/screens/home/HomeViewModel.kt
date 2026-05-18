@@ -140,6 +140,8 @@ class HomeViewModel(
 
 private fun TaskDto.toHomeTaskUi(projectNameById: Map<Long, String>): HomeTaskUi {
     return HomeTaskUi(
+        id = id,
+        projectId = projectId,
         title = title,
         projectName = projectNameById[projectId] ?: "Проект #$projectId",
         deadline = formatApiDateShort(dueAt),

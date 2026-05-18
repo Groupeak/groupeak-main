@@ -42,6 +42,10 @@ class ProjectViewModel(
         private set
 
     init {
+        refreshData()
+    }
+
+    fun refreshData() {
         loadProjectDetails()
         loadTasks()
         loadMembers()

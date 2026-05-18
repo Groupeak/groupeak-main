@@ -46,6 +46,8 @@ data class TasksUiState(
     val isLoadingTaskDetails: Boolean = false,
     val selectedTaskDetails: TaskDetailsUi? = null,
     val isSubmittingTaskId: Long? = null,
+    val taskToDeleteId: Long? = null,
+    val isDeletingTaskId: Long? = null,
     val statusMessage: String? = null,
     val statusMessageIsError: Boolean = false,
 )

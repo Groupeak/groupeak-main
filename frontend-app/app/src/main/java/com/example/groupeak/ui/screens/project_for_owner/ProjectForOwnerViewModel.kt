@@ -47,6 +47,10 @@ class ProjectForOwnerViewModel(
         private set
 
     init {
+        refreshData()
+    }
+
+    fun refreshData() {
         loadProjectDetails()
         loadTasks()
         loadMembers()
@@ -57,9 +61,14 @@ class ProjectForOwnerViewModel(
         viewModelScope.launch {
             val result = taskRepository.getProjectTasks(projectId)
             result.onSuccess { tasks ->
-                val current = tasks.filter { it.status == "in_progress" || it.status == "todo" }.map { it.toUiModel() }
+                val now = System.currentTimeMillis()
+                val current = tasks.filter {
+                    (it.status == "in_progress" || it.status == "todo") && !isOverdue(it, now)
+                }.map { it.toUiModel() }
                 val review = tasks.filter { it.status == "in_review" }.map { it.toUiModel() }
-                val inactive = tasks.filter { it.status == "done" || it.status == "cancelled" }.map { it.toUiModel() }
+                val inactive = tasks.filter {
+                    it.status == "done" || it.status == "cancelled" || it.status == "postponed" || isOverdue(it, now)
+                }.map { it.toUiModel(now) }
 
                 uiState = uiState.copy(
                     currentTasks = current,
@@ -71,6 +80,20 @@ class ProjectForOwnerViewModel(
                     tasksMode = ProjectTasksMode.ALL_THREE
                 )
             }
+        }
+    }
+
+    private fun isOverdue(task: com.example.groupeak.data.remote.dto.TaskDto, nowMillis: Long): Boolean {
+        if (task.status == "done" || task.status == "postponed") return false
+        val dueAt = task.dueAt ?: return false
+        return try {
+            val instant = java.time.Instant.parse(dueAt)
+            instant.toEpochMilli() < nowMillis
+        } catch (e: Exception) {
+            try {
+                val odt = java.time.OffsetDateTime.parse(dueAt)
+                odt.toInstant().toEpochMilli() < nowMillis
+            } catch (e2: Exception) { false }
         }
     }
 
@@ -98,7 +121,7 @@ class ProjectForOwnerViewModel(
         }
     }
 
-    private fun TaskDto.toUiModel(): ProjectTaskItemUi {
+    private fun TaskDto.toUiModel(nowMillis: Long = System.currentTimeMillis()): ProjectTaskItemUi {
         return ProjectTaskItemUi(
             id = this.id,
             title = this.title,
@@ -108,7 +131,12 @@ class ProjectForOwnerViewModel(
                 else -> ProjectTaskPriorityUi.LOW
             },
             deadline = formatDate(this.dueAt),
-            visualType = if (this.status == "done") TaskVisualType.DONE else TaskVisualType.NONE
+            visualType = when {
+                this.status == "done" -> TaskVisualType.DONE
+                this.status == "postponed" -> TaskVisualType.ALARM_OFF
+                isOverdue(this, nowMillis) -> TaskVisualType.ALARM_OFF
+                else -> TaskVisualType.NONE
+            }
         )
     }
 
@@ -134,7 +162,10 @@ class ProjectForOwnerViewModel(
             id = this.id,
             title = this.title,
             date = formatDate(this.startAt),
-            time = formatTime(this.startAt)
+            time = formatTime(this.startAt),
+            description = this.description ?: "",
+            link = this.meetingUrl ?: "",
+            participants = this.participants ?: emptyList()
         )
     }
 
@@ -144,7 +175,7 @@ class ProjectForOwnerViewModel(
             val cleanIso = isoString.take(19)
             val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US)
             val date = parser.parse(cleanIso) ?: return isoString
-            val formatter = SimpleDateFormat("dd.MM.yy", Locale.getDefault())
+            val formatter = SimpleDateFormat("dd.MM.yyyy", Locale.getDefault())
             formatter.format(date)
         } catch (e: Exception) {
             isoString
@@ -228,4 +259,105 @@ class ProjectForOwnerViewModel(
         }
     }
 
+    fun deleteTask(taskId: Long) {
+        viewModelScope.launch {
+            val result = taskRepository.deleteTask(projectId, taskId)
+            result.onSuccess {
+                loadTasks()
+                loadProjectDetails()
+            }.onFailure { error ->
+                android.util.Log.e("TASK_DELETE", "Error deleting task: ${error.message}")
+            }
+        }
+    }
+
+    fun deleteEvent(eventId: Long) {
+        viewModelScope.launch {
+            val result = eventRepository.deleteEvent(projectId, eventId)
+            result.onSuccess {
+                loadEvents()
+                loadProjectDetails()
+            }.onFailure { error ->
+                android.util.Log.e("EVENT_DELETE", "Error deleting event: ${error.message}")
+            }
+        }
+    }
+
+    fun approveTask(taskId: Long, newDeadline: String = "") {
+        viewModelScope.launch {
+            val request = com.example.groupeak.data.remote.dto.PatchTaskRequest(
+                status = "done"
+            )
+            val result = taskRepository.updateTask(projectId, taskId, request)
+            result.onSuccess {
+                loadTasks()
+                loadProjectDetails()
+            }.onFailure { error ->
+                android.util.Log.e("TASK_APPROVE", "Error approving task: ${error.message}")
+            }
+        }
+    }
+
+    fun rejectTask(taskId: Long) {
+        viewModelScope.launch {
+            val request = com.example.groupeak.data.remote.dto.PatchTaskRequest(
+                status = "in_progress"
+            )
+            val result = taskRepository.updateTask(projectId, taskId, request)
+            result.onSuccess {
+                loadTasks()
+                loadProjectDetails()
+            }.onFailure { error ->
+                android.util.Log.e("TASK_REJECT", "Error rejecting task: ${error.message}")
+            }
+        }
+    }
+
+    fun updateEvent(
+        eventId: Long,
+        title: String?,
+        date: String?,
+        time: String?,
+        link: String?,
+        description: String?,
+        participantsText: String?
+    ) {
+        viewModelScope.launch {
+            // Конвертация даты и времени в ISO
+            val startAt = if (!date.isNullOrBlank() && !time.isNullOrBlank()) {
+                try {
+                    val formatter = SimpleDateFormat("dd.MM.yyyy HH:mm", Locale.getDefault())
+                    formatter.timeZone = TimeZone.getDefault()
+                    val parsed = formatter.parse("$date $time")
+                    
+                    val isoFormatter = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+                    isoFormatter.timeZone = TimeZone.getTimeZone("UTC")
+                    if (parsed != null) isoFormatter.format(parsed) else null
+                } catch (e: Exception) { null }
+            } else null
+
+            // Пытаемся найти ID участников по именам из списка
+            val participantIds = if (!participantsText.isNullOrBlank()) {
+                val names = participantsText.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                uiState.members.filter { names.contains(it.fullName) }.map { it.id }
+            } else null
+
+            val result = eventRepository.updateEvent(
+                projectId = projectId,
+                eventId = eventId,
+                title = title,
+                meetingUrl = link,
+                description = description,
+                startAt = startAt,
+                endAt = null,
+                participantIds = participantIds
+            )
+            result.onSuccess {
+                loadEvents()
+                loadProjectDetails()
+            }.onFailure { error ->
+                android.util.Log.e("EVENT_UPDATE", "Error updating event: ${error.message}")
+            }
+        }
+    }
 }

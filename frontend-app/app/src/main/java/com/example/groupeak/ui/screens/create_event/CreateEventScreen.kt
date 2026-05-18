@@ -499,7 +499,7 @@ fun CreateEventScreen(
         // Диалог выбора участников
         if (showParticipantsDialog) {
             Dialog(
-                onDismissRequest = { showProjectDialog = false },
+                onDismissRequest = { showParticipantsDialog = false },
                 properties = DialogProperties(
                     usePlatformDefaultWidth = false,
                     dismissOnClickOutside = true
@@ -508,7 +508,7 @@ fun CreateEventScreen(
                 Box(
                     modifier = Modifier
                         .width(348.dp)
-                        .height(495.dp)
+                        .height(520.dp)
                 ) {
                     Card(
                         modifier = Modifier.fillMaxSize(),
@@ -611,6 +611,18 @@ fun CreateEventScreen(
                                     }
                                 }
                             }
+
+                            Spacer(Modifier.height(16.dp))
+
+                            PrimaryButton(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 20.dp)
+                                    .height(44.dp),
+                                text = "Готово",
+                                onClick = { showParticipantsDialog = false },
+                                fontSize = 16.sp
+                            )
 
                             Spacer(Modifier.height(23.dp))
                         }

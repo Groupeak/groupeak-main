@@ -47,4 +47,44 @@ class EventRepositoryImpl(
             Result.failure(e)
         }
     }
+
+    override suspend fun updateEvent(
+        projectId: Long,
+        eventId: Long,
+        title: String?,
+        meetingUrl: String?,
+        description: String?,
+        startAt: String?,
+        endAt: String?,
+        participantIds: List<Long>?
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            val request = com.example.groupeak.data.remote.dto.UpdateEventRequest(
+                title = title,
+                meetingUrl = meetingUrl,
+                description = description,
+                startAt = startAt,
+                endAt = endAt,
+                participantIds = participantIds
+            )
+            api.updateEvent(projectId, eventId, request)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("EventRepositoryImpl", "updateEvent error", e)
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun deleteEvent(
+        projectId: Long,
+        eventId: Long
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            api.deleteEvent(projectId, eventId)
+            Result.success(Unit)
+        } catch (e: Exception) {
+            Log.e("EventRepositoryImpl", "deleteEvent error", e)
+            Result.failure(e)
+        }
+    }
 }

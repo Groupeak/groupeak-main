@@ -54,6 +54,7 @@ fun HomeScreen(
     onProfileClick: () -> Unit,
     onNotificationsClick: () -> Unit,
     onAllTasksClick: () -> Unit,
+    onTaskClick: (projectId: Long, taskId: Long) -> Unit = { _, _ -> },
     onProjectClick: (Long, Boolean) -> Unit,
 ) {
     GroupeakBackground {
@@ -84,6 +85,7 @@ fun HomeScreen(
                 upcomingTasks = uiState.upcomingTasks,
                 projects = uiState.projects,
                 onAllTasksClick = onAllTasksClick,
+                onTaskClick = onTaskClick,
                 onProjectClick = onProjectClick,
                 modifier = Modifier
                     .align(Alignment.TopCenter)
@@ -203,6 +205,7 @@ private fun HomeCard(
     upcomingTasks: List<HomeTaskUi>,
     projects: List<HomeProjectUi>,
     onAllTasksClick: () -> Unit,
+    onTaskClick: (projectId: Long, taskId: Long) -> Unit,
     onProjectClick: (Long, Boolean) -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -259,7 +262,10 @@ private fun HomeCard(
         }
 
         upcomingTasks.take(3).forEach { task ->
-            HomeTaskRow(task = task)
+            HomeTaskRow(
+                task = task,
+                onClick = { onTaskClick(task.projectId, task.id) }
+            )
             SectionDivider()
         }
 
@@ -295,10 +301,12 @@ private fun HomeCard(
 @Composable
 private fun HomeTaskRow(
     task: HomeTaskUi,
+    onClick: () -> Unit = {},
 ) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(start = 37.dp, end = 37.dp, top = 17.dp, bottom = 17.dp)
     ) {
         Text(
