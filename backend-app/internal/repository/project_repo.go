@@ -14,6 +14,7 @@ type ProjectRepository interface {
 	IsProjectMember(ctx context.Context, db DBTX, projectID, userID int64) (bool, error)
 	EnsureProjectExists(ctx context.Context, db DBTX, projectID int64) error
 	GetProjectOwnerID(ctx context.Context, db DBTX, projectID int64) (int64, error)
+	GetUserIDByEmail(ctx context.Context, db DBTX, email string) (int64, error)
 	GetUserEmail(ctx context.Context, db DBTX, userID int64) (string, error)
 	CheckUserIsMemberByEmail(ctx context.Context, db DBTX, projectID int64, email string) (bool, error)
 
@@ -74,6 +75,12 @@ func (r *projectRepo) GetProjectOwnerID(ctx context.Context, db DBTX, projectID 
 	var ownerID int64
 	err := db.QueryRowContext(ctx, `SELECT owner_id FROM projects WHERE id = $1`, projectID).Scan(&ownerID)
 	return ownerID, err
+}
+
+func (r *projectRepo) GetUserIDByEmail(ctx context.Context, db DBTX, email string) (int64, error) {
+	var id int64
+	err := db.QueryRowContext(ctx, `SELECT id FROM users WHERE email = $1`, email).Scan(&id)
+	return id, err
 }
 
 func (r *projectRepo) GetUserEmail(ctx context.Context, db DBTX, userID int64) (string, error) {

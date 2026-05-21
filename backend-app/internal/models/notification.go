@@ -13,6 +13,7 @@ const (
 	EventTypeTaskDeleted    EventType = "task_deleted"
 	EventTypeTaskReviewed   EventType = "task_reviewed"
 	EventTypeProjectMember  EventType = "project_member_added"
+	EventTypeProjectInvite  EventType = "project_invite"
 	EventTypeProjectKicked  EventType = "project_member_removed"
 	EventTypeEventCreated   EventType = "event_created"
 	EventTypeEventUpdated   EventType = "event_updated"

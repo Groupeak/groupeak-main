@@ -31,12 +31,10 @@ func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID in
 	if !isOwner {
 		return nil, ErrNotProjectOwner
 	}
-
 	email, err := normalizeAndValidateEmail(req.Email)
 	if err != nil {
 		return nil, err
 	}
-
 	alreadyMember, err := s.repo.CheckUserIsMemberByEmail(ctx, s.db, projectID, email)
 	if err != nil {
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
@@ -44,7 +42,6 @@ func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID in
 	if alreadyMember {
 		return nil, ErrAlreadyProjectMember
 	}
-
 	hasPending, err := s.repo.CheckPendingInvite(ctx, s.db, projectID, email)
 	if err != nil {
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
@@ -52,25 +49,48 @@ func (s *ProjectService) InviteMember(ctx context.Context, ownerID, projectID in
 	if hasPending {
 		return nil, ErrInviteAlreadyPending
 	}
-
 	token, err := generateInviteToken()
 	if err != nil {
 		s.logger.Error("failed to generate invite token", slog.String("error", err.Error()))
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-
 	invite := &models.ProjectInvite{
 		ProjectID: projectID,
 		Email:     email,
 		Token:     token,
 	}
-
 	if err := s.repo.CreateInvite(ctx, s.db, invite); err != nil {
 		s.logger.Error("failed to create invite in DB", slog.String("error", err.Error()))
 		return nil, apperror.New(http.StatusInternalServerError, "internal server error")
 	}
-
 	s.logger.Info("invite created", slog.Int64("project_id", projectID), slog.String("email", email))
+
+	invitedUserID, err := s.repo.GetUserIDByEmail(ctx, s.db, email)
+	if err == nil && invitedUserID > 0 {
+		var projectName string
+		var projectDesc string
+		projectStats, err := s.repo.GetProjectDetails(ctx, s.db, projectID)
+		if err == nil && projectStats != nil {
+			projectName = projectStats.Name
+			if projectStats.Description != nil {
+				projectDesc = *projectStats.Description
+			}
+		}
+		s.bus.Publish(eventbus.SystemEvent{
+			Type:      models.EventTypeProjectInvite,
+			ProjectID: projectID,
+			ActorID:   ownerID,
+			EntityID:  invite.ID,
+			Payload: map[string]interface{}{
+				"target_user_id": invitedUserID,
+				"action":         "invited",
+				"project_name":   projectName,
+				"description":    projectDesc,
+				"role":           "Участник",
+				"title":          "Приглашение в проект",
+			},
+		})
+	}
 	return invite, nil
 }
 

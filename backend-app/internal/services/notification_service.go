@@ -42,7 +42,7 @@ func (s *NotificationService) HandleEvent(ctx context.Context, e eventbus.System
 		}
 
 	case models.EventTypeProjectMember, models.EventTypeProjectKicked,
-		models.EventTypeTaskUnassigned:
+		models.EventTypeTaskUnassigned, models.EventTypeProjectInvite:
 		if tID, ok := e.Payload["target_user_id"].(int64); ok {
 			targetUserIDs = []int64{tID}
 		}
